@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# App runtime / logs
+logs/
+*.log
+
+# MediaPipe model weights (downloaded on first run)
+models/*.task
+!models/.gitkeep
+
+# Optional local audio extract
+assets/*.wav
+
+# Junk / scratch
+hiiii.txt
+
+# Secrets
+.env
+.env.*
+credentials*.json
+*.pem

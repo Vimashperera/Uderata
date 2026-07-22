@@ -1,0 +1,2 @@
+# Runtime media (expert_display.mp4 / .wav) is created by preprocess_multi_expert.py
+# or bootstrapped as a placeholder by config.ensure_runtime_assets().
