@@ -23,7 +23,6 @@ Optional PowerShell:
 import json
 import os
 import shutil
-import subprocess
 import sys
 import time
 
@@ -37,6 +36,7 @@ from config import (  # noqa: E402
     WORKSPACE_ROOT,
     APP_ROOT,
     ASSETS_DIR,
+    ensure_expert_audio,
     resolve_expert_source_dir,
     resolve_display_video_path,
     JSON_PATH,
@@ -272,32 +272,14 @@ def main():
             display_target if os.path.isfile(display_target) else vids[canon_i]
         )
 
-    wav_path = os.path.join(ASSETS_DIR, "expert_display.wav")
-    try:
-        r = subprocess.run(
-            [
-                "ffmpeg", "-y", "-i", display_target,
-                "-vn", "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2",
-                wav_path,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=180,
+    wav_path = ensure_expert_audio(display_target, force=True)
+    if wav_path:
+        print(f"Reference audio (WAV):\n  {wav_path}")
+    else:
+        print(
+            "\n[INFO] Could not extract reference WAV "
+            "(install imageio-ffmpeg or put ffmpeg on PATH)."
         )
-        if r.returncode == 0 and os.path.isfile(wav_path) and os.path.getsize(wav_path) > 0:
-            print(f"Reference audio (WAV):\n  {wav_path}")
-        elif r.returncode != 0:
-            err = (r.stderr or r.stdout or "").strip()
-            print(f"\n[INFO] ffmpeg WAV skipped: {(err[-300:] if err else 'no stderr')}")
-            if os.path.isfile(wav_path) and os.path.getsize(wav_path) == 0:
-                try:
-                    os.remove(wav_path)
-                except OSError:
-                    pass
-    except FileNotFoundError:
-        print("\n[INFO] ffmpeg not in PATH — skipping WAV.")
-    except Exception as e:
-        print(f"\n[WARN] WAV extraction failed: {e}")
 
     disp_cap = cv2.VideoCapture(display_target)
     disp_frames = int(disp_cap.get(cv2.CAP_PROP_FRAME_COUNT)) if disp_cap.isOpened() else 0

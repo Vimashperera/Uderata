@@ -6,6 +6,7 @@ Override folder: set env UDARATA_EXPERT_VIDEOS to the full path of your expert c
 import json
 import os
 import shutil
+import subprocess
 
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 WORKSPACE_ROOT = os.path.normpath(os.path.join(APP_ROOT, "..", ".."))
@@ -42,6 +43,76 @@ def resolve_display_video_path() -> str:
 
 
 VIDEO_PATH = resolve_display_video_path()
+AUDIO_WAV_NAME = "expert_display.wav"
+
+
+def resolve_expert_audio_path(video_path: str | None = None) -> str:
+    """WAV path next to the display video (beat track for preview/practice)."""
+    base = os.path.dirname(os.path.abspath(video_path or VIDEO_PATH))
+    return os.path.join(base, AUDIO_WAV_NAME)
+
+
+def _ffmpeg_candidates() -> list:
+    """Prefer system ffmpeg, then the binary bundled with imageio-ffmpeg."""
+    found = ["ffmpeg"]
+    try:
+        import imageio_ffmpeg
+        bundled = imageio_ffmpeg.get_ffmpeg_exe()
+        if bundled and os.path.isfile(bundled):
+            found.append(bundled)
+    except Exception:
+        pass
+    return found
+
+
+def ensure_expert_audio(video_path: str | None = None, force: bool = False) -> str | None:
+    """
+    Ensure expert_display.wav exists beside the display video.
+    Returns the WAV path on success, or None if extraction is unavailable.
+    """
+    video_path = video_path or resolve_display_video_path()
+    if not os.path.isfile(video_path):
+        return None
+
+    wav_path = resolve_expert_audio_path(video_path)
+    if (
+        not force
+        and os.path.isfile(wav_path)
+        and os.path.getsize(wav_path) > 0
+    ):
+        return wav_path
+
+    os.makedirs(os.path.dirname(wav_path), exist_ok=True)
+    last_err = ""
+    for ff in _ffmpeg_candidates():
+        try:
+            r = subprocess.run(
+                [
+                    ff, "-y", "-i", video_path,
+                    "-vn", "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2",
+                    wav_path,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+            if r.returncode == 0 and os.path.isfile(wav_path) and os.path.getsize(wav_path) > 0:
+                return wav_path
+            last_err = (r.stderr or r.stdout or "").strip()
+            if os.path.isfile(wav_path) and os.path.getsize(wav_path) == 0:
+                try:
+                    os.remove(wav_path)
+                except OSError:
+                    pass
+        except FileNotFoundError:
+            continue
+        except Exception as e:
+            last_err = str(e)
+            continue
+
+    if last_err:
+        print(f"[config] Could not extract expert audio: {last_err[-300:]}")
+    return None
 
 
 def _norm_folder_name(name: str) -> str:
@@ -170,6 +241,9 @@ def ensure_runtime_assets() -> dict:
     }
 
     if result["video_ok"]:
+        # Extract beat track from the expert clip when missing (OpenCV is silent)
+        if not result.get("placeholder"):
+            ensure_expert_audio(VIDEO_PATH)
         return result
 
     # Any other video already sitting in assets/
@@ -180,6 +254,7 @@ def ensure_runtime_assets() -> dict:
         result["video_source"] = "assets"
         result["video_path"] = VIDEO_PATH
         result["message"] = f"Using display video:\n{VIDEO_PATH}"
+        ensure_expert_audio(VIDEO_PATH)
         return result
 
     source_dir = resolve_expert_source_dir()
@@ -193,6 +268,7 @@ def ensure_runtime_assets() -> dict:
             result["video_source"] = "copied"
             result["video_path"] = VIDEO_PATH
             result["message"] = f"Copied display video from:\n{src}"
+            ensure_expert_audio(VIDEO_PATH)
             return result
         except OSError as e:
             result["message"] = f"Could not copy expert video: {e}"

@@ -31,6 +31,7 @@ from core.motion_features import (
     build_motion_feature_vector,
 )
 from core.soft_dtw import PhaseConstrainedAligner
+from config import ensure_expert_audio, resolve_expert_audio_path
 from ui.theme import C, font_display, font_ui
 
 try:
@@ -715,8 +716,7 @@ class PracticeScreen(ctk.CTkFrame):
         self._rep_start_time = 0.0
         self._exp_fps_ref = 30.0
         self._ref_duration_sec = 1.0
-        self._audio_wav_path = os.path.join(
-            os.path.dirname(os.path.abspath(self.video_path)), "expert_display.wav")
+        self._audio_wav_path = resolve_expert_audio_path(self.video_path)
         self._loop_audio_started = False
         self._frozen_exp_photo = None
         self._audio_poll_id = None
@@ -1151,6 +1151,8 @@ class PracticeScreen(ctk.CTkFrame):
             command=self._end_session_user,
         )
         self._start_loop_audio()
+        # Arm video clock with audio so decode/UI lag cannot drag the expert behind the beat
+        self._rep_start_time = time.time()
         self._ui_update()
 
     def _end_session_user(self):
@@ -1183,6 +1185,9 @@ class PracticeScreen(ctk.CTkFrame):
         """Start/restart music in sync with the current expert video loop."""
         self._loop_audio_started = False
         self._rep_audio_active = False
+        self._audio_wav_path = resolve_expert_audio_path(self.video_path)
+        if not os.path.isfile(self._audio_wav_path):
+            ensure_expert_audio(self.video_path)
         if not PYGAME or not os.path.isfile(self._audio_wav_path):
             return
         if not self._ensure_mixer():
@@ -1212,7 +1217,6 @@ class PracticeScreen(ctk.CTkFrame):
             return
         if self._practice_loop < REFERENCE_LOOPS:
             self._practice_loop += 1
-            self._rep_start_time = time.time()
             if not self._open_expert_video():
                 self._ending = True
                 self._show_complete_overlay("video_error")
@@ -1226,6 +1230,7 @@ class PracticeScreen(ctk.CTkFrame):
                 text_color=C["offwhite"],
             )
             self._start_loop_audio()
+            self._rep_start_time = time.time()
         else:
             if not self._ending:
                 self._ending = True
@@ -1302,36 +1307,61 @@ class PracticeScreen(ctk.CTkFrame):
         
         # print(f"[UI] Tick - result_slot empty={self._result_slot._data is None}, raw_slot empty={self._raw_slot._data is None}")
 
-        # ── Expert panel: looping reference video (student practices along) ──
+        # ── Expert panel: clock-synced reference (skip frames if UI lags) ──
         if self._session_phase == "practice" and self._exp_cap is not None:
-            ret, exp_frame = self._exp_cap.read()
-            if not ret:
+            fps = max(float(self._exp_fps_ref or 30.0), 1e-3)
+            total = max(int(self._exp_total or 0), 1)
+            # Prefer pygame music position when the beat is playing
+            elapsed = time.time() - self._rep_start_time
+            if PYGAME and self._rep_audio_active:
+                try:
+                    pos_ms = pygame.mixer.music.get_pos()
+                    if pos_ms >= 0:
+                        elapsed = pos_ms / 1000.0
+                except Exception:
+                    pass
+
+            if elapsed >= (total / fps):
                 self._on_expert_loop_ended()
                 if not self._running or self._ending:
                     return
             else:
-                self._exp_cur += 1
-                self._loop_frames_read += 1
-                lb = _letterbox(exp_frame, self.EXP_W, self.EXP_H)
-                photo = ImageTk.PhotoImage(
-                    Image.fromarray(cv2.cvtColor(lb, cv2.COLOR_BGR2RGB)))
-                self._exp_photo = photo
-                try:
-                    self._exp_lbl.configure(image=photo, text="")
-                except Exception:
-                    pass
-                ea = self._expert_loader.get_angles_for_video_sync(
-                    self._exp_cur, self._exp_total)
-                if ea:
-                    for jname, var in self._exp_angle_vars.items():
-                        v = ea.get(jname)
-                        var.set(f"{v:.1f}°" if v is not None else "—°")
-                    if self._pose_thread:
-                        sx = self._expert_loader.sync_index(self._exp_cur, self._exp_total)
-                        eb = self._expert_loader.get_bones_for_video_sync(
-                            self._exp_cur, self._exp_total)
-                        self._pose_thread.set_expert_sync(
-                            ea, bones=eb, frame_idx=sx if sx is not None else -1)
+                target = min(int(elapsed * fps), total - 1)
+                exp_frame = None
+                while self._exp_cur <= target:
+                    ret, exp_frame = self._exp_cap.read()
+                    if not ret:
+                        self._on_expert_loop_ended()
+                        if not self._running or self._ending:
+                            return
+                        exp_frame = None
+                        break
+                    self._exp_cur += 1
+                    self._loop_frames_read += 1
+
+                if exp_frame is not None:
+                    lb = _letterbox(exp_frame, self.EXP_W, self.EXP_H)
+                    photo = ImageTk.PhotoImage(
+                        Image.fromarray(cv2.cvtColor(lb, cv2.COLOR_BGR2RGB)))
+                    self._exp_photo = photo
+                    try:
+                        self._exp_lbl.configure(image=photo, text="")
+                    except Exception:
+                        pass
+                    ea = self._expert_loader.get_angles_for_video_sync(
+                        self._exp_cur, self._exp_total)
+                    if ea:
+                        for jname, var in self._exp_angle_vars.items():
+                            v = ea.get(jname)
+                            var.set(f"{v:.1f}°" if v is not None else "—°")
+                        if self._pose_thread:
+                            sx = self._expert_loader.sync_index(
+                                self._exp_cur, self._exp_total)
+                            eb = self._expert_loader.get_bones_for_video_sync(
+                                self._exp_cur, self._exp_total)
+                            self._pose_thread.set_expert_sync(
+                                ea, bones=eb,
+                                frame_idx=sx if sx is not None else -1)
 
         # ── Webcam / pose panel ───────────────────────────────────────────────
         # Keep completion overlay off while a live session is running

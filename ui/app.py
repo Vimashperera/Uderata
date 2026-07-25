@@ -113,9 +113,14 @@ class App(ctk.CTk):
         video_path = assets.get("video_path") or config.VIDEO_PATH
         self._screens["preview"].video_path = video_path
         self._screens["practice"].video_path = video_path
-        self._screens["practice"]._audio_wav_path = os.path.join(
-            os.path.dirname(os.path.abspath(video_path)), "expert_display.wav"
+        self._screens["practice"]._audio_wav_path = (
+            config.resolve_expert_audio_path(video_path)
         )
+        # Preview plays the same beat track as practice
+        if hasattr(self._screens["preview"], "_audio_wav_path"):
+            self._screens["preview"]._audio_wav_path = (
+                config.resolve_expert_audio_path(video_path)
+            )
 
         if assets.get("placeholder"):
             mb.showwarning("Using Placeholder Video", assets["message"])

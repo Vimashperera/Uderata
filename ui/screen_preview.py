@@ -1,9 +1,11 @@
 """
 screen_preview.py  —  Screen 2: Expert Video Preview
 Black & gold layout: LEFT video + controls | RIGHT info + CTA.
+Plays the expert clip with its beat track (expert_display.wav).
 """
 
 import os
+import time
 from typing import Callable, Optional
 
 import cv2
@@ -11,11 +13,20 @@ import numpy as np
 import customtkinter as ctk
 from PIL import Image, ImageTk
 
+from config import ensure_expert_audio, resolve_expert_audio_path
 from ui.theme import C, font_display, font_ui
+
+try:
+    import pygame
+    pygame.mixer.init()
+    PYGAME = True
+except Exception:
+    PYGAME = False
 
 VIDEO_MAX_W = 640
 VIDEO_MAX_H = 360
-FRAME_MS = 33
+# Poll often; frames advance from the media clock (not a fixed per-frame delay)
+TICK_MS = 8
 
 
 def _letterbox(frame: np.ndarray, tw: int, th: int) -> np.ndarray:
@@ -51,6 +62,11 @@ class PreviewScreen(ctk.CTkFrame):
         self._fps = 30.0
         self._photo = None
         self._after = None
+        self._audio_wav_path = resolve_expert_audio_path(video_path)
+        self._audio_active = False
+        self._play_origin = 0.0          # wall clock origin for A/V sync
+        self._audio_start_offset = 0.0   # seconds into the track when play() was called
+        self._pause_elapsed = 0.0        # media time frozen while paused
 
         self._build_ui()
 
@@ -282,20 +298,104 @@ class PreviewScreen(ctk.CTkFrame):
         self._total = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self._fps = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
         self._cur = 0
+        self._audio_wav_path = resolve_expert_audio_path(self.video_path)
+        if not os.path.isfile(self._audio_wav_path):
+            ensure_expert_audio(self.video_path)
         return True
 
-    def _tick(self):
-        if not self._playing or self._cap is None:
-            return
-        ret, frame = self._cap.read()
-        if not ret:
-            self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self._cur = 0
-            ret, frame = self._cap.read()
-            if not ret:
-                return
-        self._cur += 1
+    def _ensure_mixer(self) -> bool:
+        if not PYGAME:
+            return False
+        try:
+            if pygame.mixer.get_init() is None:
+                pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
+            return pygame.mixer.get_init() is not None
+        except Exception:
+            try:
+                pygame.mixer.init()
+                return True
+            except Exception:
+                return False
 
+    def _stop_audio(self):
+        self._audio_active = False
+        if not PYGAME:
+            return
+        try:
+            pygame.mixer.music.stop()
+        except Exception:
+            pass
+
+    def _arm_clock(self, from_sec: float = 0.0):
+        """Align wall-clock origin so media time starts at from_sec."""
+        self._audio_start_offset = max(0.0, float(from_sec))
+        self._pause_elapsed = self._audio_start_offset
+        # At speed s, media_time = (now - origin) * s  →  origin = now - media/s
+        spd = max(self._speed, 1e-6)
+        self._play_origin = time.perf_counter() - self._audio_start_offset / spd
+
+    def _media_elapsed(self) -> float:
+        """Seconds into the clip according to audio (preferred) or wall clock."""
+        if self._speed == 1.0 and PYGAME and self._audio_active:
+            try:
+                pos_ms = pygame.mixer.music.get_pos()
+                if pos_ms >= 0:
+                    return self._audio_start_offset + pos_ms / 1000.0
+            except Exception:
+                pass
+        return (time.perf_counter() - self._play_origin) * self._speed
+
+    def _start_audio(self, from_sec: float = 0.0):
+        """Play beat track in sync with the expert video (1× only)."""
+        self._stop_audio()
+        self._arm_clock(from_sec)
+        if self._speed != 1.0:
+            return
+        if not PYGAME or not os.path.isfile(self._audio_wav_path):
+            return
+        if not self._ensure_mixer():
+            return
+        try:
+            pygame.mixer.music.load(self._audio_wav_path)
+            try:
+                pygame.mixer.music.play(loops=0, start=max(0.0, float(from_sec)))
+            except TypeError:
+                pygame.mixer.music.play(loops=0)
+            self._audio_active = True
+            # Re-arm after play() so origin matches audible start as closely as possible
+            self._arm_clock(from_sec)
+        except Exception:
+            self._audio_active = False
+
+    def _pause_audio(self):
+        self._pause_elapsed = self._media_elapsed()
+        if not PYGAME or not self._audio_active:
+            return
+        try:
+            pygame.mixer.music.pause()
+        except Exception:
+            pass
+
+    def _resume_audio(self):
+        from_sec = self._pause_elapsed if self._pause_elapsed > 0 else (
+            self._cur / max(self._fps, 1.0)
+        )
+        if self._speed != 1.0:
+            self._arm_clock(from_sec)
+            return
+        if not PYGAME:
+            self._arm_clock(from_sec)
+            return
+        if not self._audio_active:
+            self._start_audio(from_sec=from_sec)
+            return
+        try:
+            pygame.mixer.music.unpause()
+            self._arm_clock(from_sec)
+        except Exception:
+            self._start_audio(from_sec=from_sec)
+
+    def _show_frame(self, frame: np.ndarray):
         lb = _letterbox(frame, VIDEO_MAX_W, VIDEO_MAX_H)
         rgb = cv2.cvtColor(lb, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(rgb)
@@ -307,9 +407,49 @@ class PreviewScreen(ctk.CTkFrame):
         self._photo = photo
         self._progress.set(self._cur / max(self._total, 1))
         self._time_lbl.configure(
-            text=f"{_fmt(self._cur/self._fps)} / {_fmt(self._total/self._fps)}"
+            text=f"{_fmt(self._cur / self._fps)} / {_fmt(self._total / self._fps)}"
         )
-        self._after = self.after(max(1, int(FRAME_MS / self._speed)), self._tick)
+
+    def _restart_loop(self):
+        """Rewind video + audio to the start for seamless looping."""
+        if self._cap is None:
+            return False
+        self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        self._cur = 0
+        self._start_audio(from_sec=0.0)
+        return True
+
+    def _tick(self):
+        if not self._playing or self._cap is None:
+            return
+
+        fps = max(self._fps, 1e-6)
+        total = max(self._total, 1)
+        elapsed = self._media_elapsed()
+        duration = total / fps
+
+        if elapsed >= duration:
+            if not self._restart_loop():
+                return
+            elapsed = 0.0
+
+        target = min(int(elapsed * fps), total - 1)
+
+        # Catch up to the media clock (skip frames if UI/decode lagged)
+        frame = None
+        while self._cur <= target:
+            ret, frame = self._cap.read()
+            if not ret:
+                if not self._restart_loop():
+                    return
+                self._after = self.after(TICK_MS, self._tick)
+                return
+            self._cur += 1
+
+        if frame is not None:
+            self._show_frame(frame)
+
+        self._after = self.after(TICK_MS, self._tick)
 
     def _toggle_play(self):
         if self._cap is None and not self._open_video():
@@ -317,9 +457,16 @@ class PreviewScreen(ctk.CTkFrame):
         self._playing = not self._playing
         self._play_btn.configure(text="⏸  Pause" if self._playing else "▶  Play")
         if self._playing:
+            if self._cur <= 1:
+                self._start_audio(from_sec=0.0)
+            else:
+                self._resume_audio()
             self._tick()
-        elif self._after:
-            self.after_cancel(self._after)
+        else:
+            if self._after:
+                self.after_cancel(self._after)
+                self._after = None
+            self._pause_audio()
 
     def _replay(self):
         if self._cap is None and not self._open_video():
@@ -327,20 +474,38 @@ class PreviewScreen(ctk.CTkFrame):
         if self._cap:
             self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             self._cur = 0
+        self._start_audio(from_sec=0.0)
         if not self._playing:
             self._toggle_play()
+        elif self._speed != 1.0:
+            self._stop_audio()
+            self._arm_clock(0.0)
 
     def _toggle_speed(self):
+        # Freeze media time across the speed change
+        at = self._media_elapsed() if self._playing else (
+            self._cur / max(self._fps, 1.0)
+        )
         self._speed = 0.5 if self._speed == 1.0 else 1.0
         self._speed_btn.configure(
             text=f"⚡ {'0.5×' if self._speed == 0.5 else '1×'}"
         )
+        if not self._playing:
+            self._pause_elapsed = at
+            return
+        if self._speed == 1.0:
+            self._start_audio(from_sec=at)
+        else:
+            self._stop_audio()
+            self._arm_clock(at)
 
     def _stop(self):
         self._playing = False
         if self._after:
             self.after_cancel(self._after)
             self._after = None
+        self._stop_audio()
+        self._pause_elapsed = 0.0
 
     def _on_back(self):
         self._stop()
@@ -351,6 +516,7 @@ class PreviewScreen(ctk.CTkFrame):
         self.on_start_practice()
 
     def on_show(self):
+        self._audio_wav_path = resolve_expert_audio_path(self.video_path)
         if self._cap is None:
             self._open_video()
 
