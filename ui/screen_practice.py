@@ -165,6 +165,13 @@ class PoseThread(threading.Thread):
     MED_WIN   = 5
     # Confidence gate threshold (FIX 6E)
     CONF_GATE = 0.6
+    # Full-body gate: do not score form/timing unless enough joints are visible
+    MIN_VALID_JOINTS = 8  # of 9 tracked joints
+    CORE_JOINTS = (
+        "left_knee", "right_knee",
+        "left_hip", "right_hip",
+        "left_shoulder", "right_shoulder",
+    )
     # Best-frame search every N frames (FIX 6B)
     FRAME_SEARCH_EVERY = 5
 
@@ -222,6 +229,8 @@ class PoseThread(threading.Thread):
         self._form_score: float = 0.0
         self._timing_score: float = 100.0
         self._lag_ms: float = 0.0
+        self._body_complete: bool = False
+        self._coach_override: str = ""
         self._aligner = PhaseConstrainedAligner(
             user_buf_len=24,
             phase_band=36,
@@ -342,8 +351,10 @@ class PoseThread(threading.Thread):
                 self._statuses    = statuses
                 self._deviations  = deviations
                 self._joint_scores = joint_scores
-                if self.acc_list:
+                if self._body_complete and self.acc_list:
                     self._live_accuracy = float(self.acc_list[-1])
+                else:
+                    self._live_accuracy = 0.0
                 self._frame_count += 1
         if pose_fh:
             try: pose_fh.close()
@@ -523,48 +534,78 @@ class PoseThread(threading.Thread):
                 joint_scores[jname] = None
                 statuses[jname] = "unknown"
 
-        # Angle-only accuracy, then Phase-2 hybrid FORM (bones + velocity)
-        angle_acc = compute_frame_accuracy(deviations, joint_scores_override=joint_scores)
-        bone_score = None
-        if user_bones and expert_bones:
-            # Map bone_std_mean (~0–0.3 typical) → scale 1.0–2.0
-            bstd = (
-                self.loader.get_frame_bone_std_mean(expert_idx)
-                if expert_idx >= 0 and self.loader.is_loaded
-                else 0.0
-            )
-            bone_tol = float(np.clip(1.0 + 5.0 * bstd, 1.0, 2.0))
-            bone_score = masked_cosine_bone_score(
-                user_bones, expert_bones, tolerance_scale=bone_tol
-            )
-        vel_score = velocity_match_score(user_vel, expert_vel)
-        form_score = hybrid_frame_accuracy(angle_acc, bone_score, vel_score)
+        # Full-body gate: partial skeletons must not produce a practice score
+        valid_joint_count = sum(
+            1 for j in ALL_JOINT_NAMES if joint_scores.get(j) is not None
+        )
+        core_ok = all(joint_scores.get(j) is not None for j in self.CORE_JOINTS)
+        body_complete = (
+            world_lms is not None
+            and valid_joint_count >= self.MIN_VALID_JOINTS
+            and core_ok
+        )
 
-        # Phase-3 overall: mostly form, timing as separate coach signal
-        # Overall for gauge history = 0.7 form + 0.3 timing (when clock active)
-        if clock_idx is not None:
-            frame_acc = 0.70 * form_score + 0.30 * timing_score
+        if not body_complete:
+            form_score = 0.0
+            frame_acc = 0.0
+            timing_score = 0.0
+            lag_ms = 0.0
+            coach_msg = (
+                "Stand further back — full body must be visible to score."
+            )
+            with self._lock:
+                self._form_score = 0.0
+                self._timing_score = 0.0
+                self._lag_ms = 0.0
+                self._body_complete = False
+                self._coach_override = coach_msg
+                self._live_accuracy = 0.0
+            # Do not record incomplete frames into session averages
         else:
-            frame_acc = form_score
-            timing_score = 100.0
+            # Angle-only accuracy, then Phase-2 hybrid FORM (bones + velocity)
+            angle_acc = compute_frame_accuracy(
+                deviations, joint_scores_override=joint_scores
+            )
+            bone_score = None
+            if user_bones and expert_bones:
+                bstd = (
+                    self.loader.get_frame_bone_std_mean(expert_idx)
+                    if expert_idx >= 0 and self.loader.is_loaded
+                    else 0.0
+                )
+                bone_tol = float(np.clip(1.0 + 5.0 * bstd, 1.0, 2.0))
+                bone_score = masked_cosine_bone_score(
+                    user_bones, expert_bones, tolerance_scale=bone_tol
+                )
+            vel_score = velocity_match_score(user_vel, expert_vel)
+            form_score = hybrid_frame_accuracy(angle_acc, bone_score, vel_score)
 
-        with self._lock:
-            self._form_score = float(form_score)
-            self._timing_score = float(timing_score)
-            self._lag_ms = float(lag_ms)
+            # Phase-3 overall: mostly form, timing as separate coach signal
+            if clock_idx is not None:
+                frame_acc = 0.70 * form_score + 0.30 * timing_score
+            else:
+                frame_acc = form_score
+                timing_score = 100.0
 
-        self.acc_list.append(frame_acc)
-        self._form_hist.append(float(form_score))
-        self._timing_hist.append(float(timing_score))
-        self._lag_hist.append(float(lag_ms))
-        for jname in ALL_JOINT_NAMES:
-            sc = joint_scores.get(jname)
-            if sc is not None:
-                self.j_hist[jname].append(sc)
-            d = deviations.get(jname)
-            if d is not None and joint_scores.get(jname) is not None:
-                self.j_dev_hist[jname].append(d)
-        self.buf.append(angles_to_vector(smooth_angles))
+            with self._lock:
+                self._form_score = float(form_score)
+                self._timing_score = float(timing_score)
+                self._lag_ms = float(lag_ms)
+                self._body_complete = True
+                self._coach_override = ""
+
+            self.acc_list.append(frame_acc)
+            self._form_hist.append(float(form_score))
+            self._timing_hist.append(float(timing_score))
+            self._lag_hist.append(float(lag_ms))
+            for jname in ALL_JOINT_NAMES:
+                sc = joint_scores.get(jname)
+                if sc is not None:
+                    self.j_hist[jname].append(sc)
+                d = deviations.get(jname)
+                if d is not None and joint_scores.get(jname) is not None:
+                    self.j_dev_hist[jname].append(d)
+            self.buf.append(angles_to_vector(smooth_angles))
 
         # ── Draw skeleton overlay ─────────────────────────────────────────
         annotated = frame.copy()
@@ -590,12 +631,19 @@ class PoseThread(threading.Thread):
                 if lm["visibility"] < 0.5: continue
                 cx, cy = int(lm["x"]*w), int(lm["y"]*h)
                 cv2.circle(annotated, (cx, cy), 4, (200,200,200), -1, cv2.LINE_AA)
-            worst = get_worst_joints(deviations, top_n=1)
-            if worst:
-                jn, dev = worst[0]
-                tip = f"{JOINT_DISPLAY_NAMES.get(jn,jn)}: {dev:.0f}d off"
-                cv2.putText(annotated, tip, (8, DISP_H-12),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255,200,0), 1, cv2.LINE_AA)
+            if body_complete:
+                worst = get_worst_joints(deviations, top_n=1)
+                if worst:
+                    jn, dev = worst[0]
+                    tip = f"{JOINT_DISPLAY_NAMES.get(jn,jn)}: {dev:.0f}d off"
+                    cv2.putText(annotated, tip, (8, DISP_H-12),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255,200,0), 1, cv2.LINE_AA)
+            else:
+                cv2.putText(
+                    annotated, "Full body required to score",
+                    (8, DISP_H - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
+                    (0, 165, 255), 1, cv2.LINE_AA,
+                )
 
         return annotated, smooth_angles, statuses, deviations, joint_scores
 
@@ -623,10 +671,17 @@ class PoseThread(threading.Thread):
     @property
     def feedback(self):
         with self._lock:
+            override = self._coach_override
+            complete = self._body_complete
             devs = dict(self._deviations)
-        if not devs: return "Initialising…"
-        acc = compute_frame_accuracy(devs)
-        return generate_feedback_message(devs, acc)
+            form = float(self._form_score)
+        if override:
+            return override
+        if not complete:
+            return "Stand further back — full body must be visible to score."
+        if not devs:
+            return "Initialising…"
+        return generate_feedback_message(devs, form)
 
 
 def _letterbox(img, target_w, target_h):
