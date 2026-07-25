@@ -48,11 +48,17 @@ class PreviewScreen(ctk.CTkFrame):
     """Screen 2 — Expert Video Preview."""
 
     def __init__(self, master, video_path: str,
-                 on_start_practice: Callable, on_back: Callable, **kwargs):
+                 on_start_practice: Callable, on_back: Callable,
+                 step_title: str = "Expert",
+                 preview_blurb: str = "", **kwargs):
         super().__init__(master, fg_color=C["bg"], **kwargs)
         self.video_path = video_path
         self.on_start_practice = on_start_practice
         self.on_back = on_back
+        self._step_title = step_title
+        self._preview_blurb = preview_blurb or (
+            "Study the expert's form carefully before starting practice."
+        )
 
         self._cap: Optional[cv2.VideoCapture] = None
         self._playing = False
@@ -69,6 +75,39 @@ class PreviewScreen(ctk.CTkFrame):
         self._pause_elapsed = 0.0        # media time frozen while paused
 
         self._build_ui()
+
+    def configure_step(self, video_path: str, step_title: str, preview_blurb: str = "",
+                       audio_path: str | None = None):
+        """Point this screen at another step (menu selection)."""
+        self._stop()
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
+        self.video_path = video_path
+        self._step_title = step_title
+        self._preview_blurb = preview_blurb or self._preview_blurb
+        self._audio_wav_path = audio_path or resolve_expert_audio_path(video_path)
+        self._cur = 0
+        self._total = 0
+        self._playing = False
+        self._speed = 1.0
+        if hasattr(self, "_nav_title"):
+            self._nav_title.configure(text=f"Expert Reference — {step_title}")
+        if hasattr(self, "_info_title"):
+            self._info_title.configure(text=step_title)
+        if hasattr(self, "_info_blurb"):
+            self._info_blurb.configure(text=self._preview_blurb)
+        if hasattr(self, "_play_btn"):
+            self._play_btn.configure(text="▶  Play")
+        if hasattr(self, "_video_lbl"):
+            self._video_lbl.configure(image=None, text="Press Play to begin")
+        if hasattr(self, "_progress"):
+            self._progress.set(0)
+        if hasattr(self, "_time_lbl"):
+            self._time_lbl.configure(text="0:00 / 0:00")
 
     def _build_ui(self):
         self.rowconfigure(0, weight=0)
@@ -97,10 +136,11 @@ class PreviewScreen(ctk.CTkFrame):
             command=self._on_back,
         ).pack(side="left")
 
-        ctk.CTkLabel(
-            nav, text="Expert Reference — Pa Saramba 01",
+        self._nav_title = ctk.CTkLabel(
+            nav, text=f"Expert Reference — {self._step_title}",
             text_color=C["gold"], font=font_ui(13, "bold"),
-        ).pack(side="left", padx=12)
+        )
+        self._nav_title.pack(side="left", padx=12)
 
         vc_outer = ctk.CTkFrame(left, fg_color="transparent")
         vc_outer.grid(row=1, column=0, pady=10)
@@ -216,26 +256,23 @@ class PreviewScreen(ctk.CTkFrame):
         ).grid(row=2, column=0, sticky="ew", padx=14, pady=(4, 10))
 
     def _build_info(self, p: ctk.CTkScrollableFrame):
-        ctk.CTkLabel(
-            p, text="Pa Saramba 01",
+        self._info_title = ctk.CTkLabel(
+            p, text=self._step_title,
             text_color=C["gold"], font=font_display(18, "bold"), anchor="w",
-        ).pack(fill="x", padx=16, pady=(16, 4))
+        )
+        self._info_title.pack(fill="x", padx=16, pady=(16, 4))
 
         ctk.CTkFrame(p, fg_color=C["gold"], height=2, corner_radius=0).pack(
             fill="x", padx=16, pady=(0, 10)
         )
 
-        ctk.CTkLabel(
+        self._info_blurb = ctk.CTkLabel(
             p,
-            text=(
-                "Pa Saramba 01 is a core Udarata (Kandyan) movement. The fused expert "
-                "timeline blends several master performances so you can match the tradition "
-                "without copying a single dancer exactly. Focus on rhythm, posture, and "
-                "clean lines."
-            ),
+            text=self._preview_blurb,
             text_color=C["ivory"], font=font_ui(10),
             wraplength=330, justify="left", anchor="w",
-        ).pack(fill="x", padx=16, pady=(0, 14))
+        )
+        self._info_blurb.pack(fill="x", padx=16, pady=(0, 14))
 
         ctk.CTkLabel(
             p, text="Key Focus Points",
@@ -435,16 +472,28 @@ class PreviewScreen(ctk.CTkFrame):
 
         target = min(int(elapsed * fps), total - 1)
 
-        # Catch up to the media clock (skip frames if UI/decode lagged)
+        # Catch up to the media clock (seek when far behind)
         frame = None
-        while self._cur <= target:
+        behind = target - self._cur + 1
+        if behind > 10:
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, target))
+            self._cur = max(0, target)
             ret, frame = self._cap.read()
             if not ret:
                 if not self._restart_loop():
                     return
                 self._after = self.after(TICK_MS, self._tick)
                 return
-            self._cur += 1
+            self._cur = target + 1
+        else:
+            while self._cur <= target:
+                ret, frame = self._cap.read()
+                if not ret:
+                    if not self._restart_loop():
+                        return
+                    self._after = self.after(TICK_MS, self._tick)
+                    return
+                self._cur += 1
 
         if frame is not None:
             self._show_frame(frame)

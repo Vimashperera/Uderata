@@ -3,8 +3,8 @@ screen_practice.py - Screen 3: Live Practice
 3-column layout (486/308/486). Threads: Capture, Pose (+ UI update loop).
 
 Flow: after countdown, the expert reference video (+ audio) plays while the
-student dances. The reference loops REFERENCE_LOOPS times; the session ends
-when the last loop finishes (or the user stops early).
+student dances. The reference plays reference_loops times (1 = no loop); the
+session ends when the last pass finishes (or the user stops early).
 """
 import os, time, threading, collections
 from typing import Callable, Optional, Dict, List
@@ -42,7 +42,7 @@ BGR_GOOD=(136,255,0); BGR_CLOSE=(0,165,255); BGR_POOR=(59,59,255)
 
 DISP_W,DISP_H = 480,270
 FRAME_MS = 33
-REFERENCE_LOOPS = 3   # expert video loops; session ends after the last loop
+DEFAULT_REFERENCE_LOOPS = 3   # Pa Saramba default; Namaskaraya uses 1
 
 DRAW_CONNS = [
     (11,12),(11,13),(13,15),(12,14),(14,16),   # upper body
@@ -657,11 +657,13 @@ class PracticeScreen(ctk.CTkFrame):
     CAM_W,CAM_H = 480,270   # webcam display size
 
     def __init__(self, master, video_path:str, json_path:str, step_title: str,
-                 on_session_end:Callable[[dict],None], on_back:Callable, **kwargs):
+                 on_session_end:Callable[[dict],None], on_back:Callable,
+                 reference_loops: int = DEFAULT_REFERENCE_LOOPS, **kwargs):
         super().__init__(master, fg_color=C["bg"], **kwargs)
         self.video_path    = video_path
         self.json_path     = json_path
         self._step_title   = step_title
+        self._reference_loops = max(1, int(reference_loops))
         self.on_session_end = on_session_end
         self.on_back        = on_back
 
@@ -710,9 +712,9 @@ class PracticeScreen(ctk.CTkFrame):
         # Gauge canvas
         self._gauge_canvas = None
 
-        # Practice: expert video loops REFERENCE_LOOPS times, then session ends
+        # Practice: expert video plays _reference_loops times, then session ends
         self._session_phase = "idle"       # idle | practice
-        self._practice_loop = 0            # 1..REFERENCE_LOOPS while playing
+        self._practice_loop = 0            # 1.._reference_loops while playing
         self._rep_start_time = 0.0
         self._exp_fps_ref = 30.0
         self._ref_duration_sec = 1.0
@@ -728,6 +730,19 @@ class PracticeScreen(ctk.CTkFrame):
         self._loop_frames_read = 0     # frames shown in current expert loop
 
         self._build_ui()
+
+    def configure_step(self, video_path: str, json_path: str, step_title: str,
+                       reference_loops: int = DEFAULT_REFERENCE_LOOPS,
+                       audio_path: str | None = None):
+        """Point this screen at another step (menu selection)."""
+        self.video_path = video_path
+        self.json_path = json_path
+        self._step_title = step_title
+        self._reference_loops = max(1, int(reference_loops))
+        self._audio_wav_path = audio_path or resolve_expert_audio_path(video_path)
+        self._expert_loader = ExpertDataLoader(json_path)
+        if hasattr(self, "_title_lbl"):
+            self._title_lbl.configure(text=f"{self._step_title} — Live Practice")
 
     # ═══════════════════════ UI BUILD ═════════════════════════════════════════
 
@@ -776,10 +791,11 @@ class PracticeScreen(ctk.CTkFrame):
             command=self._stop_and_back,
         ).grid(row=0, column=0, padx=8, pady=6)
 
-        ctk.CTkLabel(
+        self._title_lbl = ctk.CTkLabel(
             bar, text=f"{self._step_title} — Live Practice",
             text_color=C["ivory"], font=font_ui(12, "bold"),
-        ).grid(row=0, column=1, padx=8)
+        )
+        self._title_lbl.grid(row=0, column=1, padx=8)
 
         self._timer_lbl = ctk.CTkLabel(
             bar, text="⏱ 0:00", text_color=C["gold"], font=font_ui(12, "bold")
@@ -1136,14 +1152,27 @@ class PracticeScreen(ctk.CTkFrame):
         # Clear leftover completion overlay before live frames
         self._hide_complete_overlay()
         self._reset_cam_panel("Get ready…")
-        self._rep_status.configure(
-            text=f"Loop {self._practice_loop} / {REFERENCE_LOOPS}",
-            text_color=C["gold"],
-        )
-        self._feedback_lbl.configure(
-            text=f"Follow the expert — loop {self._practice_loop} of {REFERENCE_LOOPS}.",
-            text_color=C["offwhite"],
-        )
+        if self._reference_loops > 1:
+            self._rep_status.configure(
+                text=f"Loop {self._practice_loop} / {self._reference_loops}",
+                text_color=C["gold"],
+            )
+            self._feedback_lbl.configure(
+                text=(
+                    f"Follow the expert — loop {self._practice_loop} "
+                    f"of {self._reference_loops}."
+                ),
+                text_color=C["offwhite"],
+            )
+        else:
+            self._rep_status.configure(
+                text="Follow once through",
+                text_color=C["gold"],
+            )
+            self._feedback_lbl.configure(
+                text="Follow the expert through the sequence once.",
+                text_color=C["offwhite"],
+            )
         self._action_btn.configure(
             text="⏹ End Session",
             fg_color=C["gold_deep"], hover_color=C["gold_hover"],
@@ -1215,18 +1244,21 @@ class PracticeScreen(ctk.CTkFrame):
                 self._ending = True
                 self._show_complete_overlay("video_error")
             return
-        if self._practice_loop < REFERENCE_LOOPS:
+        if self._practice_loop < self._reference_loops:
             self._practice_loop += 1
             if not self._open_expert_video():
                 self._ending = True
                 self._show_complete_overlay("video_error")
                 return
             self._rep_status.configure(
-                text=f"Loop {self._practice_loop} / {REFERENCE_LOOPS}",
+                text=f"Loop {self._practice_loop} / {self._reference_loops}",
                 text_color=C["gold"],
             )
             self._feedback_lbl.configure(
-                text=f"Follow the expert — loop {self._practice_loop} of {REFERENCE_LOOPS}.",
+                text=(
+                    f"Follow the expert — loop {self._practice_loop} "
+                    f"of {self._reference_loops}."
+                ),
                 text_color=C["offwhite"],
             )
             self._start_loop_audio()
@@ -1234,7 +1266,8 @@ class PracticeScreen(ctk.CTkFrame):
         else:
             if not self._ending:
                 self._ending = True
-                self._show_complete_overlay("loops_complete")
+                ended = "once_complete" if self._reference_loops <= 1 else "loops_complete"
+                self._show_complete_overlay(ended)
 
     def _show_complete_overlay(self, ended_by:str):
         """Show 'Session Complete!' for 1.5s then transition."""
@@ -1276,9 +1309,9 @@ class PracticeScreen(ctk.CTkFrame):
             "joint_histories":  {k: list(v) for k,v in self._joint_hist.items()},
             "joint_deviations": {k: list(v) for k,v in self._joint_dev_hist.items()},
             "ended_by":         ended_by,
-            "reference_loops_target": REFERENCE_LOOPS,
+            "reference_loops_target": self._reference_loops,
             "reference_loop_at_end": self._practice_loop,
-            "practice_reps_target": REFERENCE_LOOPS,  # alias for older report code
+            "practice_reps_target": self._reference_loops,  # alias for older report code
             "practice_rep_at_end": self._practice_loop,
             "session_phase_at_end": getattr(self, "_session_phase", "idle"),
         }
@@ -1328,16 +1361,31 @@ class PracticeScreen(ctk.CTkFrame):
             else:
                 target = min(int(elapsed * fps), total - 1)
                 exp_frame = None
-                while self._exp_cur <= target:
+                behind = target - self._exp_cur + 1
+                # Jump ahead when far behind so UI never decodes a burst of frames
+                if behind > 10:
+                    self._exp_cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, target))
+                    self._exp_cur = max(0, target)
                     ret, exp_frame = self._exp_cap.read()
-                    if not ret:
+                    if ret:
+                        self._exp_cur = target + 1
+                        self._loop_frames_read += 1
+                    else:
                         self._on_expert_loop_ended()
                         if not self._running or self._ending:
                             return
                         exp_frame = None
-                        break
-                    self._exp_cur += 1
-                    self._loop_frames_read += 1
+                else:
+                    while self._exp_cur <= target:
+                        ret, exp_frame = self._exp_cap.read()
+                        if not ret:
+                            self._on_expert_loop_ended()
+                            if not self._running or self._ending:
+                                return
+                            exp_frame = None
+                            break
+                        self._exp_cur += 1
+                        self._loop_frames_read += 1
 
                 if exp_frame is not None:
                     lb = _letterbox(exp_frame, self.EXP_W, self.EXP_H)

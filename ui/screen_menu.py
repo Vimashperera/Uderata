@@ -1,18 +1,21 @@
 """
-screen_menu.py — Welcome screen (Udarata / Pa Saramba 01).
+screen_menu.py — Welcome screen (Udarata multi-step).
 Black & gold brand-first home.
 """
 import customtkinter as ctk
 from tkinter import Canvas
-import tkinter as tk
 from typing import Callable, Optional
 
 import config
 from ui.theme import C, font_display, font_ui
 
+# Content column width inside the 1280px window
+MENU_CONTENT_W = 960
+STEP_DESC_WRAP = 820
+
 
 class MenuScreen(ctk.CTkFrame):
-    """Screen 1 — select Pa Saramba 01 and begin."""
+    """Screen 1 — select a step and begin."""
 
     def __init__(self, master, on_begin: Callable[[str], None], **kwargs):
         super().__init__(master, fg_color=C["bg"], **kwargs)
@@ -26,7 +29,6 @@ class MenuScreen(ctk.CTkFrame):
         self.rowconfigure(1, weight=1)
         self.rowconfigure(2, weight=0)
 
-        # Thin gold crown line
         ctk.CTkFrame(self, fg_color=C["gold"], height=3, corner_radius=0).grid(
             row=0, column=0, sticky="ew"
         )
@@ -35,16 +37,22 @@ class MenuScreen(ctk.CTkFrame):
         content.grid(row=1, column=0, sticky="nsew")
         content.columnconfigure(0, weight=1)
         content.rowconfigure(0, weight=1)
-        content.rowconfigure(1, weight=0)
-        content.rowconfigure(2, weight=1)
 
-        center = ctk.CTkFrame(content, fg_color="transparent")
-        center.grid(row=1, column=0)
+        # Fixed-width centered column so the step list never collapses
+        center = ctk.CTkFrame(
+            content, fg_color="transparent", width=MENU_CONTENT_W, height=620,
+        )
+        center.grid(row=0, column=0)
+        center.grid_propagate(False)
         center.columnconfigure(0, weight=1)
+        center.rowconfigure(2, weight=1)
+
+        # Stretch to available height between crown lines
+        self.after(50, lambda: self._size_center(center, content))
 
         self._build_header(center)
         ctk.CTkFrame(center, fg_color=C["gold_dim"], height=1, corner_radius=0).grid(
-            row=1, column=0, sticky="ew", padx=80, pady=(8, 18)
+            row=1, column=0, sticky="ew", pady=(4, 12)
         )
         self._build_style_card(center)
         self._build_cta(center)
@@ -53,9 +61,17 @@ class MenuScreen(ctk.CTkFrame):
             row=2, column=0, sticky="ew"
         )
 
+    def _size_center(self, center: ctk.CTkFrame, content: ctk.CTkFrame):
+        try:
+            content.update_idletasks()
+            h = max(content.winfo_height() - 8, 520)
+            center.configure(height=h)
+        except Exception:
+            center.configure(height=620)
+
     def _build_header(self, parent):
         header = ctk.CTkFrame(parent, fg_color="transparent")
-        header.grid(row=0, column=0, padx=60, pady=(40, 4))
+        header.grid(row=0, column=0, sticky="ew", pady=(28, 2))
 
         ctk.CTkLabel(
             header,
@@ -66,10 +82,10 @@ class MenuScreen(ctk.CTkFrame):
 
         ctk.CTkLabel(
             header,
-            text="Pa Saramba Coaching",
+            text="Udarata Step Coaching",
             text_color=C["ivory"],
             font=font_display(16, "italic"),
-        ).pack(pady=(4, 10))
+        ).pack(pady=(2, 4))
 
         ctk.CTkLabel(
             header,
@@ -86,8 +102,9 @@ class MenuScreen(ctk.CTkFrame):
             border_width=1,
             border_color=C["border"],
         )
-        card.grid(row=2, column=0, padx=60, pady=4, sticky="ew")
+        card.grid(row=2, column=0, sticky="nsew", pady=4)
         card.columnconfigure(0, weight=1)
+        card.rowconfigure(1, weight=1)
 
         header_row = ctk.CTkFrame(card, fg_color=C["elevated"], corner_radius=10)
         header_row.grid(row=0, column=0, sticky="ew", padx=2, pady=2)
@@ -98,7 +115,7 @@ class MenuScreen(ctk.CTkFrame):
             text_color=C["gold"],
             font=font_ui(13, "bold"),
             anchor="w",
-        ).pack(side="left", padx=20, pady=12)
+        ).pack(side="left", padx=20, pady=10)
 
         ctk.CTkLabel(
             header_row,
@@ -107,26 +124,26 @@ class MenuScreen(ctk.CTkFrame):
             font=font_ui(10, "italic"),
         ).pack(side="right", padx=20)
 
-        steps_frame = ctk.CTkFrame(card, fg_color="transparent")
-        steps_frame.grid(row=1, column=0, padx=16, pady=16, sticky="ew")
+        steps_frame = ctk.CTkScrollableFrame(
+            card,
+            fg_color="transparent",
+            corner_radius=0,
+            width=MENU_CONTENT_W - 28,
+        )
+        steps_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(4, 10))
         steps_frame.columnconfigure(0, weight=1)
 
         self._step_cards = {}
-        self._add_step_card(
-            steps_frame,
-            row=0,
-            step_id=config.STEP_ID,
-            title=config.STEP_TITLE,
-            description=(
-                "Practice against a fused expert timeline built from master performances. "
-                "Match joint angles, bone lines, and musical timing."
-            ),
-            tags=["Legs", "Arms", "Torso"],
-            difficulty="Focus",
-        )
-        self._add_coming_soon_card(
-            steps_frame, row=1, title="More Udarata steps — coming later"
-        )
+        for i, step in enumerate(config.list_steps()):
+            self._add_step_card(
+                steps_frame,
+                row=i,
+                step_id=step["id"],
+                title=step["title"],
+                description=step["description"],
+                tags=step.get("tags", []),
+                difficulty=step.get("difficulty", ""),
+            )
 
     def _add_step_card(self, parent, row, step_id, title, description, tags, difficulty):
         frame = ctk.CTkFrame(
@@ -137,13 +154,13 @@ class MenuScreen(ctk.CTkFrame):
             border_color=C["divider"],
             cursor="hand2",
         )
-        frame.grid(row=row, column=0, sticky="ew", padx=4, pady=6)
+        frame.grid(row=row, column=0, sticky="ew", padx=6, pady=5)
         frame.columnconfigure(1, weight=1)
 
         radio_canvas = Canvas(
             frame, width=22, height=22, bg=C["card"], highlightthickness=0
         )
-        radio_canvas.grid(row=0, column=0, rowspan=2, padx=(14, 8), pady=14)
+        radio_canvas.grid(row=0, column=0, rowspan=2, padx=(14, 8), pady=12)
         radio_canvas.create_oval(2, 2, 20, 20, outline=C["gold_dim"], width=2)
 
         title_lbl = ctk.CTkLabel(
@@ -153,7 +170,7 @@ class MenuScreen(ctk.CTkFrame):
             font=font_ui(14, "bold"),
             anchor="w",
         )
-        title_lbl.grid(row=0, column=1, sticky="w", padx=(4, 8), pady=(12, 2))
+        title_lbl.grid(row=0, column=1, sticky="ew", padx=(4, 16), pady=(10, 2))
 
         desc_lbl = ctk.CTkLabel(
             frame,
@@ -161,13 +178,13 @@ class MenuScreen(ctk.CTkFrame):
             text_color=C["muted"],
             font=font_ui(10),
             anchor="w",
-            wraplength=520,
+            wraplength=STEP_DESC_WRAP,
             justify="left",
         )
-        desc_lbl.grid(row=1, column=1, sticky="w", padx=(4, 8), pady=(0, 8))
+        desc_lbl.grid(row=1, column=1, sticky="ew", padx=(4, 16), pady=(0, 4))
 
         meta_row = ctk.CTkFrame(frame, fg_color="transparent")
-        meta_row.grid(row=2, column=1, sticky="w", padx=(4, 8), pady=(0, 12))
+        meta_row.grid(row=2, column=1, sticky="w", padx=(4, 16), pady=(0, 10))
 
         for tag in tags:
             ctk.CTkLabel(
@@ -204,22 +221,6 @@ class MenuScreen(ctk.CTkFrame):
 
         self._step_cards[step_id] = {"frame": frame, "radio_canvas": radio_canvas}
 
-    def _add_coming_soon_card(self, parent, row, title):
-        frame = ctk.CTkFrame(
-            parent,
-            fg_color=C["bg"],
-            corner_radius=12,
-            border_width=1,
-            border_color=C["divider"],
-        )
-        frame.grid(row=row, column=0, sticky="ew", padx=4, pady=6)
-        ctk.CTkLabel(
-            frame,
-            text=title,
-            text_color=C["muted"],
-            font=font_ui(11, "italic"),
-        ).pack(padx=20, pady=14)
-
     def _select_step(self, step_id: str, frame: ctk.CTkFrame, radio_canvas: Canvas):
         for sid, widgets in self._step_cards.items():
             widgets["frame"].configure(
@@ -244,14 +245,13 @@ class MenuScreen(ctk.CTkFrame):
 
     def _build_cta(self, parent):
         cta_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        cta_frame.grid(row=3, column=0, pady=(22, 48))
+        cta_frame.grid(row=3, column=0, sticky="ew", pady=(14, 24))
 
         self._cta_btn = ctk.CTkButton(
             cta_frame,
             text="Begin Learning  →",
             font=font_ui(14, "bold"),
-            width=280,
-            height=50,
+            height=48,
             corner_radius=8,
             fg_color=C["elevated"],
             hover_color=C["elevated"],
@@ -261,14 +261,14 @@ class MenuScreen(ctk.CTkFrame):
             state="disabled",
             command=self._on_begin_clicked,
         )
-        self._cta_btn.pack()
+        self._cta_btn.pack(fill="x")
 
         ctk.CTkLabel(
             cta_frame,
             text="Select the step above to continue",
             text_color=C["muted"],
             font=font_ui(10, "italic"),
-        ).pack(pady=(10, 0))
+        ).pack(pady=(8, 0))
 
     def _on_begin_clicked(self):
         if self._selected_step:

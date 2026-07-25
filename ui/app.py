@@ -1,7 +1,6 @@
 """
-app.py — Screen manager for Udarata Pa Saramba 01 (1280×720).
+app.py — Screen manager for Udarata multi-step learner (1280×720).
 """
-import os
 import customtkinter as ctk
 import tkinter.messagebox as mb
 
@@ -19,7 +18,7 @@ class App(ctk.CTk):
 
         apply_app_chrome(self)
 
-        self.title("Udarata Dance — Pa Saramba 01")
+        self.title("Udarata Dance")
         self.geometry("1280x720")
         self.resizable(False, False)
 
@@ -36,6 +35,7 @@ class App(ctk.CTk):
 
         self._screens: dict = {}
         self._current = None
+        self._active_step_id = config.STEP_ID
 
         self._init_screens()
         self.show_screen("menu")
@@ -52,6 +52,8 @@ class App(ctk.CTk):
             video_path=config.VIDEO_PATH,
             on_start_practice=self._on_ready_start_practice,
             on_back=lambda: self.show_screen("menu"),
+            step_title=config.STEP_TITLE,
+            preview_blurb=config.get_step(config.STEP_ID).get("preview_blurb", ""),
         )
         preview.grid(row=0, column=0, sticky="nsew")
         self._screens["preview"] = preview
@@ -63,6 +65,7 @@ class App(ctk.CTk):
             step_title=config.STEP_TITLE,
             on_session_end=self._on_session_end,
             on_back=lambda: self.show_screen("preview"),
+            reference_loops=config.get_step(config.STEP_ID).get("reference_loops", 3),
         )
         practice.grid(row=0, column=0, sticky="nsew")
         self._screens["practice"] = practice
@@ -88,13 +91,22 @@ class App(ctk.CTk):
         self._current = screen
 
     def _on_step_selected(self, step_id: str):
-        assets = config.ensure_runtime_assets()
+        try:
+            step = config.get_step(step_id)
+        except KeyError:
+            mb.showerror("Unknown Step", f"Step id not recognised:\n{step_id}")
+            return
+
+        assets = config.ensure_runtime_assets(step_id)
+        self._active_step_id = step_id
+        self.title(f"Udarata Dance — {step['title']}")
 
         if not assets["json_ok"]:
             mb.showerror(
                 "Data Not Found",
-                f"Fused expert data not found:\n{config.JSON_PATH}\n\n"
-                "Run first:\n  python preprocess_multi_expert.py",
+                f"Fused expert data not found for {step['title']}:\n"
+                f"{assets.get('json_path') or config.step_json_path(step_id)}\n\n"
+                f"Run first:\n  python preprocess_multi_expert.py --step {step_id}",
             )
             return
 
@@ -104,23 +116,31 @@ class App(ctk.CTk):
                 assets["message"]
                 or (
                     f"Reference video not found under:\n{config.ASSETS_DIR}\n\n"
-                    "Expected: Uderata pasaramba expert.mp4"
+                    f"Expected: {step['video_candidates'][0]}"
                 ),
             )
             return
 
-        # Keep screens pointed at the resolved clip (name may vary)
-        video_path = assets.get("video_path") or config.VIDEO_PATH
-        self._screens["preview"].video_path = video_path
-        self._screens["practice"].video_path = video_path
-        self._screens["practice"]._audio_wav_path = (
-            config.resolve_expert_audio_path(video_path)
+        source_path = assets.get("video_path") or config.VIDEO_PATH
+        # Prefer lightweight proxy for UI playback (4K sources are too heavy)
+        video_path = assets.get("playback_path") or source_path
+        json_path = assets.get("json_path") or config.step_json_path(step_id)
+        loops = int(assets.get("reference_loops") or step.get("reference_loops", 3))
+        audio_path = config.resolve_expert_audio_path(source_path)
+
+        self._screens["preview"].configure_step(
+            video_path=video_path,
+            step_title=step["title"],
+            preview_blurb=step.get("preview_blurb", ""),
+            audio_path=audio_path,
         )
-        # Preview plays the same beat track as practice
-        if hasattr(self._screens["preview"], "_audio_wav_path"):
-            self._screens["preview"]._audio_wav_path = (
-                config.resolve_expert_audio_path(video_path)
-            )
+        self._screens["practice"].configure_step(
+            video_path=video_path,
+            json_path=json_path,
+            step_title=step["title"],
+            reference_loops=loops,
+            audio_path=audio_path,
+        )
 
         if assets.get("placeholder"):
             mb.showwarning("Using Placeholder Video", assets["message"])

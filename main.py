@@ -1,5 +1,5 @@
 """
-main.py — Udarata Pa Saramba 01 desktop learning app entry point.
+main.py — Udarata multi-step desktop learning app entry point.
 """
 import sys
 import os

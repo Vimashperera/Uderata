@@ -390,18 +390,19 @@ class ReportScreen(ctk.CTkFrame):
             from reportlab.lib.pagesizes import A4
             from reportlab.pdfgen import canvas as rl_canvas
             import tkinter.filedialog as fd
+            r = self._compute()
+            step_slug = str(r.get("step_name", "udarata")).lower().replace(" ", "_")
             path = fd.asksaveasfilename(
                 defaultextension=".pdf",
                 filetypes=[("PDF", "*.pdf")],
-                initialfile="pa_saramba_01_report.pdf",
+                initialfile=f"{step_slug}_report.pdf",
             )
             if not path:
                 return
-            r = self._compute()
             c = rl_canvas.Canvas(path, pagesize=A4)
             pw, ph = A4
             c.setFont("Helvetica-Bold", 16)
-            c.drawString(40, ph - 50, "Udarata Dance — Pa Saramba 01")
+            c.drawString(40, ph - 50, f"Udarata Dance — {r['step_name']}")
             c.setFont("Helvetica", 12)
             c.drawString(40, ph - 72, f"Report: {r['step_name']}")
             dur = r["duration"]
