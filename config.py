@@ -122,9 +122,152 @@ STEPS = {
         "reference_loops": 1,  # play once — do not loop in practice
         "expert_source_rel": None,
     },
+    "goda_saramba_01": {
+        "id": "goda_saramba_01",
+        "title": "Goda Saramba 01",
+        "description": (
+            "Goda Saramba 01 — follow the expert through this foundational phrase "
+            "with grounded footwork and clear arm lines."
+        ),
+        "preview_blurb": (
+            "Goda Saramba 01 is a core Udarata phrase. Study the expert's weight shifts, "
+            "knee depth, and arm paths, then practice along for the full clip."
+        ),
+        "tags": ["Legs", "Arms", "Goda Saramba"],
+        "difficulty": "Focus",
+        "json_name": "goda_saramba_01.json",
+        "video_candidates": (
+            "Goda Saramba 1.mp4",
+            "goda saramba 1.mp4",
+        ),
+        "video_keywords": ("goda saramba 1", "godasaramba 1"),
+        "reference_loops": 1,
+        "expert_source_rel": None,
+    },
+    "goda_saramba_02": {
+        "id": "goda_saramba_02",
+        "title": "Goda Saramba 02",
+        "description": (
+            "Goda Saramba 02 — continue the Goda Saramba sequence with consistent "
+            "posture and musical timing."
+        ),
+        "preview_blurb": (
+            "Goda Saramba 02 builds on the first phrase. Keep the torso centred, match "
+            "the expert's rhythm, and stay soft through the elbows."
+        ),
+        "tags": ["Legs", "Arms", "Goda Saramba"],
+        "difficulty": "Focus",
+        "json_name": "goda_saramba_02.json",
+        "video_candidates": (
+            "Goda Saramba 2.mp4",
+            "goda saramba 2.mp4",
+        ),
+        "video_keywords": ("goda saramba 2", "godasaramba 2"),
+        "reference_loops": 1,
+        "expert_source_rel": None,
+    },
+    "goda_saramba_03": {
+        "id": "goda_saramba_03",
+        "title": "Goda Saramba 03",
+        "description": (
+            "Goda Saramba 03 — a longer Goda Saramba phrase for stamina and form "
+            "consistency across the full sequence."
+        ),
+        "preview_blurb": (
+            "Goda Saramba 03 is the longest phrase in this set. Watch how the expert "
+            "sustains posture and rhythm, then practice along for the full clip."
+        ),
+        "tags": ["Legs", "Arms", "Goda Saramba"],
+        "difficulty": "Challenge",
+        "json_name": "goda_saramba_03.json",
+        "video_candidates": (
+            "Goda Saramba 3.mp4",
+            "goda saramba 3.mp4",
+        ),
+        "video_keywords": ("goda saramba 3", "godasaramba 3"),
+        "reference_loops": 1,
+        "expert_source_rel": None,
+    },
+    "goda_saramba_kasthirama_01": {
+        "id": "goda_saramba_kasthirama_01",
+        "title": "Goda Saramba Kasthirama 01",
+        "description": (
+            "Kasthirama variation of Goda Saramba 01 — practice the phrase twice "
+            "alongside the expert reference."
+        ),
+        "preview_blurb": (
+            "Goda Saramba Kasthirama 01 is a short variation phrase. Watch carefully, "
+            "then dance with the expert for two full loops."
+        ),
+        "tags": ["Legs", "Arms", "Kasthirama"],
+        "difficulty": "Focus",
+        "json_name": "goda_saramba_kasthirama_01.json",
+        "video_candidates": (
+            "Goda Saramba 1 - kasthirama.mp4",
+            "goda saramba 1 - kasthirama.mp4",
+        ),
+        "video_keywords": ("kasthirama 1", "goda saramba 1 - kasthirama"),
+        "reference_loops": 2,  # kasthirama repeats twice
+        "expert_source_rel": None,
+    },
+    "goda_saramba_kasthirama_02": {
+        "id": "goda_saramba_kasthirama_02",
+        "title": "Goda Saramba Kasthirama 02",
+        "description": (
+            "Kasthirama variation of Goda Saramba 02 — practice the phrase twice "
+            "alongside the expert reference."
+        ),
+        "preview_blurb": (
+            "Goda Saramba Kasthirama 02 continues the kasthirama set. Match the expert "
+            "for two loops, focusing on clean lines and timing."
+        ),
+        "tags": ["Legs", "Arms", "Kasthirama"],
+        "difficulty": "Focus",
+        "json_name": "goda_saramba_kasthirama_02.json",
+        "video_candidates": (
+            "Goda Saramba 2 - kasthirama.mp4",
+            "goda saramba 2 - kasthirama.mp4",
+        ),
+        "video_keywords": ("kasthirama 2", "goda saramba 2 - kasthirama"),
+        "reference_loops": 2,  # kasthirama repeats twice
+        "expert_source_rel": None,
+    },
+    "goda_saramba_kasthirama_03": {
+        "id": "goda_saramba_kasthirama_03",
+        "title": "Goda Saramba Kasthirama 03",
+        "description": (
+            "Kasthirama variation of Goda Saramba 03 — practice the phrase twice "
+            "alongside the expert reference."
+        ),
+        "preview_blurb": (
+            "Goda Saramba Kasthirama 03 closes the kasthirama set. Dance with the expert "
+            "for two full loops and keep posture steady through the finish."
+        ),
+        "tags": ["Legs", "Arms", "Kasthirama"],
+        "difficulty": "Challenge",
+        "json_name": "goda_saramba_kasthirama_03.json",
+        "video_candidates": (
+            "Goda Saramba 3 - kasthirama.mp4",
+            "goda saramba 3 - kasthirama.mp4",
+        ),
+        "video_keywords": ("kasthirama 3", "goda saramba 3 - kasthirama"),
+        "reference_loops": 2,  # kasthirama repeats twice
+        "expert_source_rel": None,
+    },
 }
 
-STEP_ORDER = ("namaskaraya", "pa_saramba_01", "pa_saramba_02", "pa_saramba_03")
+STEP_ORDER = (
+    "namaskaraya",
+    "pa_saramba_01",
+    "pa_saramba_02",
+    "pa_saramba_03",
+    "goda_saramba_01",
+    "goda_saramba_02",
+    "goda_saramba_03",
+    "goda_saramba_kasthirama_01",
+    "goda_saramba_kasthirama_02",
+    "goda_saramba_kasthirama_03",
+)
 
 
 def get_step(step_id: str) -> dict:
@@ -176,6 +319,9 @@ def video_matches_step(path: str, step_id: str) -> bool:
         for name in other.get("video_candidates", ()):
             if base == name.lower():
                 return False
+    # Keep kasthirama clips only on kasthirama steps (and vice versa)
+    if ("kasthirama" in step_id) != ("kasthirama" in base):
+        return False
     return any(k in base for k in step.get("video_keywords", ()))
 
 
