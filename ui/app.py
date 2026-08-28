@@ -1,11 +1,12 @@
 """
-app.py — Screen manager for Udarata multi-step learner (1280×720).
+app.py — Screen manager for multi-style dance learner (1280×720).
 """
 import customtkinter as ctk
 import tkinter.messagebox as mb
 
 import config
 from ui.theme import C, apply_app_chrome
+from ui.screen_style import StyleScreen
 from ui.screen_menu import MenuScreen
 from ui.screen_preview import PreviewScreen
 from ui.screen_practice import PracticeScreen
@@ -18,7 +19,7 @@ class App(ctk.CTk):
 
         apply_app_chrome(self)
 
-        self.title("Udarata Dance")
+        self.title(config.APP_NAME)
         self.geometry("1280x720")
         self.resizable(False, False)
 
@@ -35,15 +36,24 @@ class App(ctk.CTk):
 
         self._screens: dict = {}
         self._current = None
+        self._active_style_id = config.STYLE_ID
         self._active_step_id = config.STEP_ID
 
         self._init_screens()
-        self.show_screen("menu")
+        self.show_screen("style")
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _init_screens(self):
-        menu = MenuScreen(self._container, on_begin=self._on_step_selected)
+        style = StyleScreen(self._container, on_style_selected=self._on_style_selected)
+        style.grid(row=0, column=0, sticky="nsew")
+        self._screens["style"] = style
+
+        menu = MenuScreen(
+            self._container,
+            on_begin=self._on_step_selected,
+            on_back=lambda: self.show_screen("style"),
+        )
         menu.grid(row=0, column=0, sticky="nsew")
         self._screens["menu"] = menu
 
@@ -65,7 +75,9 @@ class App(ctk.CTk):
             step_title=config.STEP_TITLE,
             on_session_end=self._on_session_end,
             on_back=lambda: self.show_screen("preview"),
-            reference_loops=config.get_step(config.STEP_ID).get("reference_loops", 3),
+            reference_loops=config.get_step(config.STEP_ID).get(
+                "reference_loops", config.DEFAULT_REFERENCE_LOOPS
+            ),
         )
         practice.grid(row=0, column=0, sticky="nsew")
         self._screens["practice"] = practice
@@ -90,6 +102,20 @@ class App(ctk.CTk):
         screen.tkraise()
         self._current = screen
 
+    def _on_style_selected(self, style_id: str):
+        try:
+            config.set_active_style(style_id)
+        except KeyError:
+            mb.showerror("Unknown Style", f"Style id not recognised:\n{style_id}")
+            return
+
+        self._active_style_id = style_id
+        self._active_step_id = config.STEP_ID
+        style = config.get_style(style_id)
+        self.title(f"{config.APP_NAME} — {style['title']}")
+        self._screens["menu"].configure_style(style_id)
+        self.show_screen("menu")
+
     def _on_step_selected(self, step_id: str):
         try:
             step = config.get_step(step_id)
@@ -99,7 +125,9 @@ class App(ctk.CTk):
 
         assets = config.ensure_runtime_assets(step_id)
         self._active_step_id = step_id
-        self.title(f"Udarata Dance — {step['title']}")
+        self._active_style_id = step["style_id"]
+        style = config.get_style(step["style_id"])
+        self.title(f"{config.APP_NAME} — {style['short_title']} — {step['title']}")
 
         if not assets["json_ok"]:
             mb.showerror(
@@ -115,7 +143,8 @@ class App(ctk.CTk):
                 "Expert Video Missing",
                 assets["message"]
                 or (
-                    f"Reference video not found under:\n{config.ASSETS_DIR}\n\n"
+                    f"Reference video not found under:\n"
+                    f"{config.step_assets_dir(step_id)}\n\n"
                     f"Expected: {step['video_candidates'][0]}"
                 ),
             )
@@ -125,7 +154,10 @@ class App(ctk.CTk):
         # Prefer lightweight proxy for UI playback (4K sources are too heavy)
         video_path = assets.get("playback_path") or source_path
         json_path = assets.get("json_path") or config.step_json_path(step_id)
-        loops = int(assets.get("reference_loops") or step.get("reference_loops", 3))
+        loops = int(
+            assets.get("reference_loops")
+            or step.get("reference_loops", config.DEFAULT_REFERENCE_LOOPS)
+        )
         audio_path = config.resolve_expert_audio_path(source_path)
 
         self._screens["preview"].configure_step(

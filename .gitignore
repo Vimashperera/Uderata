@@ -29,6 +29,11 @@ models/*.task
 
 # Optional local audio extract
 assets/*.wav
+assets/**/*.wav
+
+# Packaging / build outputs
+build/
+dist/
 
 # Junk / scratch
 hiiii.txt

@@ -21,11 +21,16 @@ from mediapipe.tasks.python import vision as mp_vision
 try:
     import config as _app_config
     DEFAULT_MODEL_COMPLEXITY = int(getattr(_app_config, "POSE_MODEL_COMPLEXITY", 1))
+    MODEL_DIR = getattr(
+        _app_config,
+        "MODELS_DIR",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models"),
+    )
 except Exception:
     DEFAULT_MODEL_COMPLEXITY = 1
+    MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")
 
 # ── Model configuration ───────────────────────────────────────────────────────
-MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")
 MODEL_FILES = {
     0: ("pose_landmarker_lite.task",
         "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"

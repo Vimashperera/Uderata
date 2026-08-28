@@ -1,5 +1,5 @@
 """
-main.py — Udarata multi-step desktop learning app entry point.
+main.py — Sri Lankan Traditional Dance Coaching entry point.
 """
 import sys
 import os
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     from ui.app import App
 
     print("=" * 60)
-    print("  Udarata Dance — Pa Saramba 01")
+    print(f"  {config.APP_NAME}")
     print("  Starting…")
     print("=" * 60)
 

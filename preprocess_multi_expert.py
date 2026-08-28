@@ -1,7 +1,7 @@
 """
 preprocess_multi_expert.py
 --------------------------
-Phase-4 expert rebuild for Udarata steps:
+Phase-4 expert rebuild for multi-style steps (Udarata / Sabaragamuwa):
 
   1. Discover expert videos for the selected step
   2. Pick a canonical clip (prefer assets display video)
@@ -10,17 +10,19 @@ Phase-4 expert rebuild for Udarata steps:
   5. Median-fuse + store per-joint variance / tolerance bands
 
 Output:
-  data/<step>.json
-  assets/<canonical display video>  (copied if needed)
-  assets/<video_stem>.wav
+  data/<style>/<step>.json
+  assets/<style>/<canonical display video>  (copied if needed)
+  assets/<style>/<video_stem>.wav
 
 Usage:
   python preprocess_multi_expert.py
   python preprocess_multi_expert.py --step namaskaraya
+  python preprocess_multi_expert.py --style sabaragamuwa --step all
   python preprocess_multi_expert.py --step all
 
 Optional PowerShell:
   $env:UDARATA_EXPERT_VIDEOS = "E:\\SLIIT\\FINAL RESEARCH\\Expert data"
+  $env:SABARAGAMUWA_EXPERT_VIDEOS = "E:\\SLIIT\\Uderata system\\vids\\Sabaragamuwa MP4"
   python preprocess_multi_expert.py --step namaskaraya
 """
 import argparse
@@ -38,17 +40,19 @@ sys.path.insert(0, SCRIPT_DIR)
 
 from config import (  # noqa: E402
     APP_ROOT,
-    ASSETS_DIR,
-    DANCE_STYLE,
     POSE_MODEL_COMPLEXITY,
     STEP_ORDER,
     STEPS,
+    STYLE_ORDER,
+    STYLES,
     ensure_expert_audio,
     ensure_playback_video,
     get_step,
+    get_style,
     resolve_display_video_path,
     resolve_expert_source_dir,
     set_active_step,
+    step_assets_dir,
     step_json_path,
     video_matches_step,
 )
@@ -81,15 +85,20 @@ def discover_videos(root: str):
 
 
 def discover_all_expert_videos(step_id: str) -> list:
-    """Union of env/source dir, assets/, and known research folders — filtered to step."""
+    """Union of env/source dir, style assets/, and known research folders — filtered to step."""
     step = get_step(step_id)
+    style = get_style(step["style_id"])
     roots = []
-    env = os.environ.get("UDARATA_EXPERT_VIDEOS", "").strip()
-    if env:
-        roots.append(env)
+    for key in (style.get("expert_env"), "DANCE_EXPERT_VIDEOS"):
+        if not key:
+            continue
+        env = os.environ.get(key, "").strip()
+        if env:
+            roots.append(env)
     roots.append(resolve_expert_source_dir(step_id))
-    roots.append(ASSETS_DIR)
-    roots.extend(_EXTRA_VIDEO_ROOTS)
+    roots.append(step_assets_dir(step_id))
+    if step["style_id"] == "udarata":
+        roots.extend(_EXTRA_VIDEO_ROOTS)
 
     preferred_names = {n.lower() for n in step["video_candidates"]}
 
@@ -173,25 +182,29 @@ def extract_angles_for_video(video_path: str, extractor) -> tuple:
 
 def preprocess_step(step_id: str) -> bool:
     step = set_active_step(step_id)
+    style = get_style(step["style_id"])
     json_path = step_json_path(step_id)
+    assets_dir = step_assets_dir(step_id)
     title = step["title"]
 
     print("=" * 70)
-    print(f"  Udarata — {title} — Phase-4 Canonical Expert Rebuild")
+    print(f"  {style['title']} — {title} — Phase-4 Canonical Expert Rebuild")
     print("=" * 70)
 
     source_dir = resolve_expert_source_dir(step_id)
     print(f"\nApp root:\n  {APP_ROOT}")
-    print(f"Step id:\n  {step_id}")
+    print(f"Style / step:\n  {step['style_id']} / {step_id}")
     print(f"Primary expert folder:\n  {source_dir}")
     print(f"  Exists: {os.path.isdir(source_dir)}")
 
     vids = discover_all_expert_videos(step_id)
     if not vids:
+        env_hint = style.get("expert_env") or "DANCE_EXPERT_VIDEOS"
         print(f"\n[ERROR] No expert videos found for step '{step_id}'.")
         print(
-            f"Place a clip like '{step['video_candidates'][0]}' in assets/, or set:\n"
-            '  $env:UDARATA_EXPERT_VIDEOS = \"E:\\SLIIT\\FINAL RESEARCH\\Expert data\"\n'
+            f"Place a clip like '{step['video_candidates'][0]}' in "
+            f"assets/{step['style_id']}/, or set:\n"
+            f'  $env:{env_hint} = \"…\\path\\to\\expert videos\"\n'
             f"  python preprocess_multi_expert.py --step {step_id}\n"
         )
         return False
@@ -247,9 +260,9 @@ def preprocess_step(step_id: str) -> bool:
     fused_fps = float(metas[canon_i]["fps"] if metas else 30.0)
 
     os.makedirs(os.path.dirname(json_path), exist_ok=True)
-    os.makedirs(ASSETS_DIR, exist_ok=True)
+    os.makedirs(assets_dir, exist_ok=True)
 
-    display_target = os.path.join(ASSETS_DIR, step["video_candidates"][0])
+    display_target = os.path.join(assets_dir, step["video_candidates"][0])
     try:
         src = vids[canon_i]
         if not os.path.isfile(display_target):
@@ -299,7 +312,8 @@ def preprocess_step(step_id: str) -> bool:
 
     output_data = {
         "metadata": {
-            "dance_style": DANCE_STYLE,
+            "dance_style": style["title"],
+            "style_id": step["style_id"],
             "step_id": step_id,
             "step_name": title,
             "reference_loops": int(step.get("reference_loops", 3)),
@@ -347,8 +361,44 @@ def preprocess_step(step_id: str) -> bool:
     return True
 
 
+def _step_ids_for(style_id: str | None, step_arg: str) -> list:
+    if style_id:
+        if style_id not in STYLES:
+            print(
+                f"[ERROR] Unknown style '{style_id}'. Known: {', '.join(STYLE_ORDER)}"
+            )
+            sys.exit(1)
+        style_steps = list(STYLES[style_id]["step_order"])
+    else:
+        style_steps = list(STEP_ORDER)
+
+    if step_arg.lower() == "all":
+        return style_steps
+
+    if step_arg not in STEPS:
+        print(f"[ERROR] Unknown step '{step_arg}'. Known: {', '.join(STEP_ORDER)}")
+        sys.exit(1)
+    if style_id and STEPS[step_arg]["style_id"] != style_id:
+        print(
+            f"[ERROR] Step '{step_arg}' belongs to style "
+            f"'{STEPS[step_arg]['style_id']}', not '{style_id}'."
+        )
+        sys.exit(1)
+    return [step_arg]
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Build fused expert pose JSON for a step.")
+    parser = argparse.ArgumentParser(
+        description="Build fused expert pose JSON for a step / style."
+    )
+    parser.add_argument(
+        "--style",
+        default=None,
+        help=(
+            "Optional style filter: udarata | sabaragamuwa. "
+            f"Known: {', '.join(STYLE_ORDER)}"
+        ),
+    )
     parser.add_argument(
         "--step",
         default="pa_saramba_01",
@@ -358,14 +408,7 @@ def main(argv=None):
         ),
     )
     args = parser.parse_args(argv)
-
-    if args.step.lower() == "all":
-        ids = list(STEP_ORDER)
-    else:
-        if args.step not in STEPS:
-            print(f"[ERROR] Unknown step '{args.step}'. Known: {', '.join(STEP_ORDER)}")
-            sys.exit(1)
-        ids = [args.step]
+    ids = _step_ids_for(args.style, args.step)
 
     ok_any = False
     for sid in ids:

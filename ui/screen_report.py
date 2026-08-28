@@ -18,6 +18,7 @@ from core.angle_calculator import (
     JOINT_DISPLAY_NAMES, JOINT_ICONS, CORRECTIVE_INSTRUCTIONS, ALL_JOINT_NAMES,
 )
 from ui.theme import C, font_display, font_ui
+import config
 
 
 def _stars(acc):
@@ -114,7 +115,7 @@ class ReportScreen(ctk.CTkFrame):
             "timing_history": timing_accs,
             "duration": sd.get("duration_seconds", 0.0),
             "ended_by": sd.get("ended_by", "user"),
-            "step_name": sd.get("step_name", "Pa Saramba 01"),
+            "step_name": sd.get("step_name", "Step"),
         }
 
     def _build_ui(self):
@@ -402,7 +403,7 @@ class ReportScreen(ctk.CTkFrame):
             c = rl_canvas.Canvas(path, pagesize=A4)
             pw, ph = A4
             c.setFont("Helvetica-Bold", 16)
-            c.drawString(40, ph - 50, f"Udarata Dance — {r['step_name']}")
+            c.drawString(40, ph - 50, f"{config.APP_NAME} — {r['step_name']}")
             c.setFont("Helvetica", 12)
             c.drawString(40, ph - 72, f"Report: {r['step_name']}")
             dur = r["duration"]

@@ -1,5 +1,5 @@
 """
-screen_menu.py — Welcome screen (Udarata multi-step).
+screen_menu.py — Step selection for the active dance style.
 Black & gold brand-first home.
 """
 import customtkinter as ctk
@@ -15,12 +15,22 @@ STEP_DESC_WRAP = 820
 
 
 class MenuScreen(ctk.CTkFrame):
-    """Screen 1 — select a step and begin."""
+    """Screen 1 — select a step and begin (filtered by active style)."""
 
-    def __init__(self, master, on_begin: Callable[[str], None], **kwargs):
+    def __init__(
+        self,
+        master,
+        on_begin: Callable[[str], None],
+        on_back: Optional[Callable[[], None]] = None,
+        **kwargs,
+    ):
         super().__init__(master, fg_color=C["bg"], **kwargs)
         self.on_begin = on_begin
+        self.on_back = on_back
         self._selected_step: Optional[str] = None
+        self._style_id = config.STYLE_ID
+        self._step_cards = {}
+        self._steps_host = None
         self._build_ui()
 
     def _build_ui(self):
@@ -47,7 +57,6 @@ class MenuScreen(ctk.CTkFrame):
         center.columnconfigure(0, weight=1)
         center.rowconfigure(2, weight=1)
 
-        # Stretch to available height between crown lines
         self.after(50, lambda: self._size_center(center, content))
 
         self._build_header(center)
@@ -71,28 +80,52 @@ class MenuScreen(ctk.CTkFrame):
 
     def _build_header(self, parent):
         header = ctk.CTkFrame(parent, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", pady=(28, 2))
+        header.grid(row=0, column=0, sticky="ew", pady=(20, 2))
 
-        ctk.CTkLabel(
+        top = ctk.CTkFrame(header, fg_color="transparent")
+        top.pack(fill="x")
+
+        if self.on_back:
+            ctk.CTkButton(
+                top,
+                text="← Styles",
+                width=100,
+                height=28,
+                corner_radius=6,
+                fg_color=C["elevated"],
+                hover_color=C["card"],
+                text_color=C["gold"],
+                border_width=1,
+                border_color=C["divider"],
+                font=font_ui(11),
+                command=self.on_back,
+            ).pack(side="left", padx=(0, 8))
+
+        style = config.get_style(self._style_id)
+
+        self._brand_lbl = ctk.CTkLabel(
             header,
-            text="UDARATA",
+            text=style["short_title"].upper(),
             text_color=C["gold"],
             font=font_display(42, "bold"),
-        ).pack()
+        )
+        self._brand_lbl.pack(pady=(8, 0))
 
-        ctk.CTkLabel(
+        self._heading_lbl = ctk.CTkLabel(
             header,
-            text="Udarata Step Coaching",
+            text=style.get("menu_heading", f"{style['short_title']} Step Coaching"),
             text_color=C["ivory"],
             font=font_display(16, "italic"),
-        ).pack(pady=(2, 4))
+        )
+        self._heading_lbl.pack(pady=(2, 4))
 
-        ctk.CTkLabel(
+        self._meta_lbl = ctk.CTkLabel(
             header,
-            text=f"{config.DANCE_STYLE}  ·  Live form & timing feedback",
+            text=f"{style['title']}  ·  Live form & timing feedback",
             text_color=C["muted"],
             font=font_ui(11),
-        ).pack()
+        )
+        self._meta_lbl.pack()
 
     def _build_style_card(self, parent):
         card = ctk.CTkFrame(
@@ -117,26 +150,37 @@ class MenuScreen(ctk.CTkFrame):
             anchor="w",
         ).pack(side="left", padx=20, pady=10)
 
-        ctk.CTkLabel(
+        style = config.get_style(self._style_id)
+        self._tradition_lbl = ctk.CTkLabel(
             header_row,
-            text="Kandyan tradition",
+            text=style["subtitle"],
             text_color=C["muted"],
             font=font_ui(10, "italic"),
-        ).pack(side="right", padx=20)
+        )
+        self._tradition_lbl.pack(side="right", padx=20)
 
-        steps_frame = ctk.CTkScrollableFrame(
+        self._steps_host = ctk.CTkScrollableFrame(
             card,
             fg_color="transparent",
             corner_radius=0,
             width=MENU_CONTENT_W - 28,
         )
-        steps_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(4, 10))
-        steps_frame.columnconfigure(0, weight=1)
+        self._steps_host.grid(row=1, column=0, sticky="nsew", padx=10, pady=(4, 10))
+        self._steps_host.columnconfigure(0, weight=1)
 
+        self._rebuild_step_cards()
+
+    def _rebuild_step_cards(self):
+        if self._steps_host is None:
+            return
+        for child in self._steps_host.winfo_children():
+            child.destroy()
         self._step_cards = {}
-        for i, step in enumerate(config.list_steps()):
+        self._selected_step = None
+
+        for i, step in enumerate(config.list_steps(self._style_id)):
             self._add_step_card(
-                steps_frame,
+                self._steps_host,
                 row=i,
                 step_id=step["id"],
                 title=step["title"],
@@ -144,6 +188,32 @@ class MenuScreen(ctk.CTkFrame):
                 tags=step.get("tags", []),
                 difficulty=step.get("difficulty", ""),
             )
+
+        if hasattr(self, "_cta_btn"):
+            self._cta_btn.configure(
+                state="disabled",
+                fg_color=C["elevated"],
+                hover_color=C["elevated"],
+                text_color=C["muted"],
+            )
+
+    def configure_style(self, style_id: str):
+        """Reload the step list for the chosen dance style."""
+        self._style_id = style_id
+        style = config.get_style(style_id)
+        if hasattr(self, "_brand_lbl"):
+            self._brand_lbl.configure(text=style["short_title"].upper())
+        if hasattr(self, "_heading_lbl"):
+            self._heading_lbl.configure(
+                text=style.get("menu_heading", f"{style['short_title']} Step Coaching")
+            )
+        if hasattr(self, "_meta_lbl"):
+            self._meta_lbl.configure(
+                text=f"{style['title']}  ·  Live form & timing feedback"
+            )
+        if hasattr(self, "_tradition_lbl"):
+            self._tradition_lbl.configure(text=style["subtitle"])
+        self._rebuild_step_cards()
 
     def _add_step_card(self, parent, row, step_id, title, description, tags, difficulty):
         frame = ctk.CTkFrame(
@@ -273,3 +343,9 @@ class MenuScreen(ctk.CTkFrame):
     def _on_begin_clicked(self):
         if self._selected_step:
             self.on_begin(self._selected_step)
+
+    def on_show(self):
+        pass
+
+    def on_hide(self):
+        pass
