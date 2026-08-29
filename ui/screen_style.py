@@ -13,9 +13,11 @@ MENU_CONTENT_W = 960
 class StyleScreen(ctk.CTkFrame):
     """Screen 0 — select a dance style from the STYLES registry."""
 
-    def __init__(self, master, on_style_selected: Callable[[str], None], **kwargs):
+    def __init__(self, master, on_style_selected: Callable[[str], None],
+                 on_history: Optional[Callable[[], None]] = None, **kwargs):
         super().__init__(master, fg_color=C["bg"], **kwargs)
         self.on_style_selected = on_style_selected
+        self.on_history = on_history
         self._selected_style: Optional[str] = None
         self._style_cards = {}
         self._build_ui()
@@ -69,6 +71,22 @@ class StyleScreen(ctk.CTkFrame):
             text_color=C["muted"],
             font=font_ui(11),
         ).pack()
+
+        if self.on_history:
+            ctk.CTkButton(
+                header,
+                text="My Progress",
+                width=130,
+                height=30,
+                corner_radius=6,
+                fg_color=C["elevated"],
+                hover_color=C["card"],
+                text_color=C["gold"],
+                border_width=1,
+                border_color=C["divider"],
+                font=font_ui(11, "bold"),
+                command=self.on_history,
+            ).pack(pady=(12, 0))
 
         ctk.CTkFrame(center, fg_color=C["gold_dim"], height=1, corner_radius=0).grid(
             row=1, column=0, sticky="ew", pady=(16, 20)

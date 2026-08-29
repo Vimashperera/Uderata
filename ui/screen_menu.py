@@ -22,11 +22,13 @@ class MenuScreen(ctk.CTkFrame):
         master,
         on_begin: Callable[[str], None],
         on_back: Optional[Callable[[], None]] = None,
+        on_history: Optional[Callable[[], None]] = None,
         **kwargs,
     ):
         super().__init__(master, fg_color=C["bg"], **kwargs)
         self.on_begin = on_begin
         self.on_back = on_back
+        self.on_history = on_history
         self._selected_step: Optional[str] = None
         self._style_id = config.STYLE_ID
         self._step_cards = {}
@@ -100,6 +102,22 @@ class MenuScreen(ctk.CTkFrame):
                 font=font_ui(11),
                 command=self.on_back,
             ).pack(side="left", padx=(0, 8))
+
+        if self.on_history:
+            ctk.CTkButton(
+                top,
+                text="My Progress",
+                width=120,
+                height=28,
+                corner_radius=6,
+                fg_color=C["elevated"],
+                hover_color=C["card"],
+                text_color=C["gold"],
+                border_width=1,
+                border_color=C["divider"],
+                font=font_ui(11, "bold"),
+                command=self.on_history,
+            ).pack(side="right")
 
         style = config.get_style(self._style_id)
 

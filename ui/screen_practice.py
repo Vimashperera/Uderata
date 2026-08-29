@@ -713,11 +713,15 @@ class PracticeScreen(ctk.CTkFrame):
 
     def __init__(self, master, video_path:str, json_path:str, step_title: str,
                  on_session_end:Callable[[dict],None], on_back:Callable,
-                 reference_loops: int = DEFAULT_REFERENCE_LOOPS, **kwargs):
+                 reference_loops: int = DEFAULT_REFERENCE_LOOPS,
+                 step_id: str | None = None, style_id: str | None = None,
+                 **kwargs):
         super().__init__(master, fg_color=C["bg"], **kwargs)
         self.video_path    = video_path
         self.json_path     = json_path
         self._step_title   = step_title
+        self._step_id      = step_id or ""
+        self._style_id     = style_id or ""
         self._reference_loops = max(1, int(reference_loops))
         self.on_session_end = on_session_end
         self.on_back        = on_back
@@ -788,11 +792,17 @@ class PracticeScreen(ctk.CTkFrame):
 
     def configure_step(self, video_path: str, json_path: str, step_title: str,
                        reference_loops: int = DEFAULT_REFERENCE_LOOPS,
-                       audio_path: str | None = None):
+                       audio_path: str | None = None,
+                       step_id: str | None = None,
+                       style_id: str | None = None):
         """Point this screen at another step (menu selection)."""
         self.video_path = video_path
         self.json_path = json_path
         self._step_title = step_title
+        if step_id is not None:
+            self._step_id = step_id
+        if style_id is not None:
+            self._style_id = style_id
         self._reference_loops = max(1, int(reference_loops))
         self._audio_wav_path = audio_path or resolve_expert_audio_path(video_path)
         self._expert_loader = ExpertDataLoader(json_path)
@@ -1356,6 +1366,8 @@ class PracticeScreen(ctk.CTkFrame):
             p3 = self._pose_thread.get_phase3_histories()
         session_data = {
             "step_name":       self._step_title,
+            "step_id":         self._step_id,
+            "style_id":        self._style_id,
             "duration_seconds": round(duration, 2),
             "frame_accuracies": list(self._frame_acc),
             "form_accuracies":  p3.get("form", list(self._frame_acc)),

@@ -1,16 +1,20 @@
 """
 app.py — Screen manager for multi-style dance learner (1280×720).
 """
+from datetime import datetime
+
 import customtkinter as ctk
 import tkinter.messagebox as mb
 
 import config
+from core import session_history as hist
 from ui.theme import C, apply_app_chrome
 from ui.screen_style import StyleScreen
 from ui.screen_menu import MenuScreen
 from ui.screen_preview import PreviewScreen
 from ui.screen_practice import PracticeScreen
 from ui.screen_report import ReportScreen
+from ui.screen_history import HistoryScreen
 
 
 class App(ctk.CTk):
@@ -18,6 +22,7 @@ class App(ctk.CTk):
         super().__init__()
 
         apply_app_chrome(self)
+        hist.init_db()
 
         self.title(config.APP_NAME)
         self.geometry("1280x720")
@@ -38,6 +43,7 @@ class App(ctk.CTk):
         self._current = None
         self._active_style_id = config.STYLE_ID
         self._active_step_id = config.STEP_ID
+        self._history_return = "style"
 
         self._init_screens()
         self.show_screen("style")
@@ -45,7 +51,11 @@ class App(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _init_screens(self):
-        style = StyleScreen(self._container, on_style_selected=self._on_style_selected)
+        style = StyleScreen(
+            self._container,
+            on_style_selected=self._on_style_selected,
+            on_history=lambda: self._open_history("style"),
+        )
         style.grid(row=0, column=0, sticky="nsew")
         self._screens["style"] = style
 
@@ -53,9 +63,17 @@ class App(ctk.CTk):
             self._container,
             on_begin=self._on_step_selected,
             on_back=lambda: self.show_screen("style"),
+            on_history=lambda: self._open_history("menu"),
         )
         menu.grid(row=0, column=0, sticky="nsew")
         self._screens["menu"] = menu
+
+        history = HistoryScreen(
+            self._container,
+            on_back=self._on_history_back,
+        )
+        history.grid(row=0, column=0, sticky="nsew")
+        self._screens["history"] = history
 
         preview = PreviewScreen(
             self._container,
@@ -78,6 +96,8 @@ class App(ctk.CTk):
             reference_loops=config.get_step(config.STEP_ID).get(
                 "reference_loops", config.DEFAULT_REFERENCE_LOOPS
             ),
+            step_id=config.STEP_ID,
+            style_id=config.STYLE_ID,
         )
         practice.grid(row=0, column=0, sticky="nsew")
         self._screens["practice"] = practice
@@ -101,6 +121,13 @@ class App(ctk.CTk):
             screen.on_show()
         screen.tkraise()
         self._current = screen
+
+    def _open_history(self, return_to: str):
+        self._history_return = return_to if return_to in self._screens else "style"
+        self.show_screen("history")
+
+    def _on_history_back(self):
+        self.show_screen(self._history_return)
 
     def _on_style_selected(self, style_id: str):
         try:
@@ -151,7 +178,6 @@ class App(ctk.CTk):
             return
 
         source_path = assets.get("video_path") or config.VIDEO_PATH
-        # Prefer lightweight proxy for UI playback (4K sources are too heavy)
         video_path = assets.get("playback_path") or source_path
         json_path = assets.get("json_path") or config.step_json_path(step_id)
         loops = int(
@@ -172,6 +198,8 @@ class App(ctk.CTk):
             step_title=step["title"],
             reference_loops=loops,
             audio_path=audio_path,
+            step_id=step_id,
+            style_id=step["style_id"],
         )
 
         if assets.get("placeholder"):
@@ -183,7 +211,6 @@ class App(ctk.CTk):
         """Preview CTA: open practice screen and start the session."""
         try:
             self.show_screen("practice")
-            # Let on_show finish resetting UI, then start (same pattern as Practice Again)
             self.after(300, lambda: self._screens["practice"]._start_session())
         except Exception:
             import traceback
@@ -193,6 +220,30 @@ class App(ctk.CTk):
             )
 
     def _on_session_end(self, session_data: dict):
+        # Ensure style/step ids (practice should already set these)
+        if not session_data.get("step_id"):
+            session_data["step_id"] = self._active_step_id
+        if not session_data.get("style_id"):
+            session_data["style_id"] = self._active_style_id
+        if not session_data.get("timestamp"):
+            session_data["timestamp"] = datetime.now().astimezone().isoformat(
+                timespec="seconds"
+            )
+
+        # Prior session for comparison — read BEFORE writing this one
+        prior = None
+        step_id = session_data.get("step_id") or ""
+        if step_id:
+            prior = hist.get_previous_session(step_id)
+        session_data["prior_session"] = prior
+
+        # Persist after scoring complete (does not affect live practice loop)
+        try:
+            summary = hist.summarize_session(session_data)
+            hist.record_session(session_data, summary=summary)
+        except Exception as e:
+            print(f"[history] Failed to record session: {e}")
+
         report_screen: ReportScreen = self._screens["report"]
         report_screen.load_report(session_data)
         self.show_screen("report")
@@ -200,7 +251,6 @@ class App(ctk.CTk):
     def _on_practice_again(self):
         try:
             self.show_screen("practice")
-            # Use lambda to ensure delayed execution works safely
             self.after(700, lambda: self._screens["practice"]._start_session())
         except Exception as e:
             import traceback

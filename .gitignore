@@ -22,6 +22,8 @@ desktop.ini
 # App runtime / logs
 logs/
 *.log
+history.db
+history.db-*
 
 # MediaPipe model weights (downloaded on first run)
 models/*.task
