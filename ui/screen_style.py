@@ -11,7 +11,7 @@ MENU_CONTENT_W = 960
 
 
 class StyleScreen(ctk.CTkFrame):
-    """Screen 0 — select Udarata or Sabaragamuwa."""
+    """Screen 0 — select a dance style from the STYLES registry."""
 
     def __init__(self, master, on_style_selected: Callable[[str], None], **kwargs):
         super().__init__(master, fg_color=C["bg"], **kwargs)
@@ -95,7 +95,13 @@ class StyleScreen(ctk.CTkFrame):
             anchor="w",
         ).pack(side="left", padx=20, pady=10)
 
-        list_frame = ctk.CTkFrame(card, fg_color="transparent")
+        card.rowconfigure(1, weight=1)
+        list_frame = ctk.CTkScrollableFrame(
+            card,
+            fg_color="transparent",
+            corner_radius=0,
+            width=MENU_CONTENT_W - 40,
+        )
         list_frame.grid(row=1, column=0, sticky="nsew", padx=14, pady=(8, 16))
         list_frame.columnconfigure(0, weight=1)
 

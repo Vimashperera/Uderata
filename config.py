@@ -396,6 +396,210 @@ _SABARAGAMUWA_STEP_ORDER = (
     "sabaragamuwa_mandi_padaya_02",
 )
 
+_PAHATHARATA_STEPS = {
+    "pahatharata_namaskaraya": {
+        "id": "pahatharata_namaskaraya",
+        "title": "Namaskaraya",
+        "description": "[INSERT: Pahatharata Namaskaraya description]",
+        "preview_blurb": "[INSERT: Pahatharata Namaskaraya preview blurb]",
+        "tags": ["[INSERT: tags]"],
+        "difficulty": "[INSERT: difficulty]",
+        "json_name": "pahatharata_namaskaraya.json",
+        "video_candidates": (
+            "Namaskaraya.mp4",
+        ),
+        "video_keywords": ("pahatharata namaskaraya",),
+        "reference_loops": DEFAULT_REFERENCE_LOOPS,
+        "expert_source_rel": os.path.join("vids", "Pahatharata MP4"),
+    },
+    "pahatharata_pa_saramba_01": {
+        "id": "pahatharata_pa_saramba_01",
+        "title": "Pa Saramba 1",
+        "description": "[INSERT: Pahatharata Pa Saramba 1 description]",
+        "preview_blurb": "[INSERT: Pahatharata Pa Saramba 1 preview blurb]",
+        "tags": ["[INSERT: tags]"],
+        "difficulty": "[INSERT: difficulty]",
+        "json_name": "pahatharata_pa_saramba_01.json",
+        "video_candidates": (
+            "Pa saramba 1.mp4",
+        ),
+        "video_keywords": ("pa saramba 1",),
+        "reference_loops": DEFAULT_REFERENCE_LOOPS,
+        "expert_source_rel": os.path.join("vids", "Pahatharata MP4"),
+    },
+    "pahatharata_pa_saramba_02": {
+        "id": "pahatharata_pa_saramba_02",
+        "title": "Pa Saramba 2",
+        "description": "[INSERT: Pahatharata Pa Saramba 2 description]",
+        "preview_blurb": "[INSERT: Pahatharata Pa Saramba 2 preview blurb]",
+        "tags": ["[INSERT: tags]"],
+        "difficulty": "[INSERT: difficulty]",
+        "json_name": "pahatharata_pa_saramba_02.json",
+        "video_candidates": (
+            "Pa saramba 2.mp4",
+        ),
+        "video_keywords": ("pa saramba 2",),
+        "reference_loops": DEFAULT_REFERENCE_LOOPS,
+        "expert_source_rel": os.path.join("vids", "Pahatharata MP4"),
+    },
+    "pahatharata_pa_saramba_03": {
+        "id": "pahatharata_pa_saramba_03",
+        "title": "Pa Saramba 3",
+        "description": "[INSERT: Pahatharata Pa Saramba 3 description]",
+        "preview_blurb": "[INSERT: Pahatharata Pa Saramba 3 preview blurb]",
+        "tags": ["[INSERT: tags]"],
+        "difficulty": "[INSERT: difficulty]",
+        "json_name": "pahatharata_pa_saramba_03.json",
+        "video_candidates": (
+            "Pa saramba 3.mp4",
+        ),
+        "video_keywords": ("pa saramba 3",),
+        "reference_loops": DEFAULT_REFERENCE_LOOPS,
+        "expert_source_rel": os.path.join("vids", "Pahatharata MP4"),
+    },
+    "pahatharata_ilangam_saraba_01": {
+        "id": "pahatharata_ilangam_saraba_01",
+        "title": "Ilangam Saraba 1",
+        "description": "[INSERT: Pahatharata Ilangam Saraba 1 description]",
+        "preview_blurb": "[INSERT: Pahatharata Ilangam Saraba 1 preview blurb]",
+        "tags": ["[INSERT: tags]"],
+        "difficulty": "[INSERT: difficulty]",
+        "json_name": "pahatharata_ilangam_saraba_01.json",
+        "video_candidates": (
+            "Ilangam Saraba 1.mp4",
+        ),
+        "video_keywords": ("ilangam saraba 1",),
+        "reference_loops": DEFAULT_REFERENCE_LOOPS,
+        "expert_source_rel": os.path.join("vids", "Pahatharata MP4"),
+    },
+    "pahatharata_ilangam_saraba_02": {
+        "id": "pahatharata_ilangam_saraba_02",
+        "title": "Ilangam Saraba 2",
+        "description": "[INSERT: Pahatharata Ilangam Saraba 2 description]",
+        "preview_blurb": "[INSERT: Pahatharata Ilangam Saraba 2 preview blurb]",
+        "tags": ["[INSERT: tags]"],
+        "difficulty": "[INSERT: difficulty]",
+        "json_name": "pahatharata_ilangam_saraba_02.json",
+        "video_candidates": (
+            "Ilangam Saraba 2.mp4",
+        ),
+        "video_keywords": ("ilangam saraba 2",),
+        "reference_loops": DEFAULT_REFERENCE_LOOPS,
+        "expert_source_rel": os.path.join("vids", "Pahatharata MP4"),
+    },
+}
+
+_PAHATHARATA_STEP_ORDER = (
+    "pahatharata_namaskaraya",
+    "pahatharata_pa_saramba_01",
+    "pahatharata_pa_saramba_02",
+    "pahatharata_pa_saramba_03",
+    "pahatharata_ilangam_saraba_01",
+    "pahatharata_ilangam_saraba_02",
+)
+
+_JANA_NATUM_STEPS = {
+    "jana_natum_kalagedi_01": {
+        "id": "jana_natum_kalagedi_01",
+        "title": "Kalagedi Natum Step 1",
+        "description": "[INSERT: Kalagedi Natum Step 1 description]",
+        "preview_blurb": "[INSERT: Kalagedi Natum Step 1 preview blurb]",
+        "tags": ["[INSERT: tags]"],
+        "difficulty": "[INSERT: difficulty]",
+        "json_name": "jana_natum_kalagedi_01.json",
+        "video_candidates": (
+            "kalagedi natum step 1.mp4",
+        ),
+        "video_keywords": ("kalagedi natum step 1",),
+        "reference_loops": DEFAULT_REFERENCE_LOOPS,
+        "expert_source_rel": os.path.join("vids", "Jana Natum MP4"),
+    },
+    "jana_natum_kalagedi_02": {
+        "id": "jana_natum_kalagedi_02",
+        "title": "Kalagedi Natum Step 2",
+        "description": "[INSERT: Kalagedi Natum Step 2 description]",
+        "preview_blurb": "[INSERT: Kalagedi Natum Step 2 preview blurb]",
+        "tags": ["[INSERT: tags]"],
+        "difficulty": "[INSERT: difficulty]",
+        "json_name": "jana_natum_kalagedi_02.json",
+        "video_candidates": (
+            "kalagedi natum step 2.mp4",
+        ),
+        "video_keywords": ("kalagedi natum step 2",),
+        "reference_loops": DEFAULT_REFERENCE_LOOPS,
+        "expert_source_rel": os.path.join("vids", "Jana Natum MP4"),
+    },
+    "jana_natum_kulu_01": {
+        "id": "jana_natum_kulu_01",
+        "title": "Kulu Natum Step 1",
+        "description": "[INSERT: Kulu Natum Step 1 description]",
+        "preview_blurb": "[INSERT: Kulu Natum Step 1 preview blurb]",
+        "tags": ["[INSERT: tags]"],
+        "difficulty": "[INSERT: difficulty]",
+        "json_name": "jana_natum_kulu_01.json",
+        "video_candidates": (
+            "kulu_natum_step_1.mp4",
+        ),
+        "video_keywords": ("kulu_natum_step_1", "kulu natum step 1"),
+        "reference_loops": DEFAULT_REFERENCE_LOOPS,
+        "expert_source_rel": os.path.join("vids", "Jana Natum MP4"),
+    },
+    "jana_natum_kulu_02": {
+        "id": "jana_natum_kulu_02",
+        "title": "Kulu Natum Step 2",
+        "description": "[INSERT: Kulu Natum Step 2 description]",
+        "preview_blurb": "[INSERT: Kulu Natum Step 2 preview blurb]",
+        "tags": ["[INSERT: tags]"],
+        "difficulty": "[INSERT: difficulty]",
+        "json_name": "jana_natum_kulu_02.json",
+        "video_candidates": (
+            "kulu_natum_step_2.mp4",
+        ),
+        "video_keywords": ("kulu_natum_step_2", "kulu natum step 2"),
+        "reference_loops": DEFAULT_REFERENCE_LOOPS,
+        "expert_source_rel": os.path.join("vids", "Jana Natum MP4"),
+    },
+    "jana_natum_lee_keli_01": {
+        "id": "jana_natum_lee_keli_01",
+        "title": "Lee Keli Step 1",
+        "description": "[INSERT: Lee Keli Step 1 description]",
+        "preview_blurb": "[INSERT: Lee Keli Step 1 preview blurb]",
+        "tags": ["[INSERT: tags]"],
+        "difficulty": "[INSERT: difficulty]",
+        "json_name": "jana_natum_lee_keli_01.json",
+        "video_candidates": (
+            "lee keli step 1.mp4",
+        ),
+        "video_keywords": ("lee keli step 1",),
+        "reference_loops": DEFAULT_REFERENCE_LOOPS,
+        "expert_source_rel": os.path.join("vids", "Jana Natum MP4"),
+    },
+    "jana_natum_lee_keli_02": {
+        "id": "jana_natum_lee_keli_02",
+        "title": "Lee Keli Step 2",
+        "description": "[INSERT: Lee Keli Step 2 description]",
+        "preview_blurb": "[INSERT: Lee Keli Step 2 preview blurb]",
+        "tags": ["[INSERT: tags]"],
+        "difficulty": "[INSERT: difficulty]",
+        "json_name": "jana_natum_lee_keli_02.json",
+        "video_candidates": (
+            "lee keli step 2.mp4",
+        ),
+        "video_keywords": ("lee keli step 2",),
+        "reference_loops": DEFAULT_REFERENCE_LOOPS,
+        "expert_source_rel": os.path.join("vids", "Jana Natum MP4"),
+    },
+}
+
+_JANA_NATUM_STEP_ORDER = (
+    "jana_natum_kalagedi_01",
+    "jana_natum_kalagedi_02",
+    "jana_natum_kulu_01",
+    "jana_natum_kulu_02",
+    "jana_natum_lee_keli_01",
+    "jana_natum_lee_keli_02",
+)
+
 STYLES = {
     "udarata": {
         "id": "udarata",
@@ -417,9 +621,29 @@ STYLES = {
         "step_order": _SABARAGAMUWA_STEP_ORDER,
         "expert_env": "SABARAGAMUWA_EXPERT_VIDEOS",
     },
+    "pahatharata": {
+        "id": "pahatharata",
+        "title": "Pahatharata",
+        "short_title": "Pahatharata",
+        "subtitle": "Pahatharata tradition",
+        "menu_heading": "Pahatharata Step Coaching",
+        "steps": _PAHATHARATA_STEPS,
+        "step_order": _PAHATHARATA_STEP_ORDER,
+        "expert_env": "PAHATHARATA_EXPERT_VIDEOS",
+    },
+    "jana_natum": {
+        "id": "jana_natum",
+        "title": "Jana Natum",
+        "short_title": "Jana Natum",
+        "subtitle": "Jana Natum tradition",
+        "menu_heading": "Jana Natum Step Coaching",
+        "steps": _JANA_NATUM_STEPS,
+        "step_order": _JANA_NATUM_STEP_ORDER,
+        "expert_env": "JANA_NATUM_EXPERT_VIDEOS",
+    },
 }
 
-STYLE_ORDER = ("udarata", "sabaragamuwa")
+STYLE_ORDER = ("udarata", "sabaragamuwa", "pahatharata", "jana_natum")
 
 # Flat registries for lookups / preprocess (step ids remain globally unique)
 STEPS: dict = {}

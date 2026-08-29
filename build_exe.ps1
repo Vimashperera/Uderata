@@ -74,9 +74,13 @@ Folder layout
   assets\
     udarata\
     sabaragamuwa\
+    pahatharata\
+    jana_natum\
   data\
     udarata\
     sabaragamuwa\
+    pahatharata\
+    jana_natum\
   models\
 "@
 Set-Content -Path (Join-Path $Dist "README_TESTERS.txt") -Value $readme -Encoding UTF8

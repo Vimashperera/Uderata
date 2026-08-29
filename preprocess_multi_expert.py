@@ -395,7 +395,7 @@ def main(argv=None):
         "--style",
         default=None,
         help=(
-            "Optional style filter: udarata | sabaragamuwa. "
+            "Optional style filter (e.g. udarata, sabaragamuwa, pahatharata, jana_natum). "
             f"Known: {', '.join(STYLE_ORDER)}"
         ),
     )
