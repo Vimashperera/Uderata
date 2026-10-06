@@ -208,10 +208,9 @@ class App(ctk.CTk):
         self.show_screen("preview")
 
     def _on_ready_start_practice(self):
-        """Preview CTA: open practice screen and start the session."""
+        """Preview CTA: open practice so the learner can opt in to recording, then press START."""
         try:
             self.show_screen("practice")
-            self.after(300, lambda: self._screens["practice"]._start_session())
         except Exception:
             import traceback
             mb.showerror(

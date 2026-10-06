@@ -24,6 +24,7 @@ logs/
 *.log
 history.db
 history.db-*
+recordings/
 
 # MediaPipe model weights (downloaded on first run)
 models/*.task

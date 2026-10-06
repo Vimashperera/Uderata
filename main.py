@@ -50,6 +50,11 @@ if __name__ == "__main__":
     print("  Starting…")
     print("=" * 60)
 
+    from core.session_recorder import cleanup_incomplete_recordings
+    removed = cleanup_incomplete_recordings()
+    if removed:
+        print(f"[INFO] Removed {removed} incomplete recording(s)")
+
     assets = config.ensure_runtime_assets()
     if assets.get("message") and assets.get("placeholder"):
         print(f"[INFO] {assets['message'].splitlines()[0]}")

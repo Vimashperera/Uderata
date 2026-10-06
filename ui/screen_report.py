@@ -160,6 +160,7 @@ class ReportScreen(ctk.CTkFrame):
             "form_comparison": form_cmp,
             "timing_comparison": timing_cmp,
             "is_first_session": prior is None and bool(summary.get("step_id")),
+            "recording": sd.get("recording") or {},
         }
 
     def _build_ui(self):
@@ -297,6 +298,7 @@ class ReportScreen(ctk.CTkFrame):
         self._build_bar_chart(left, r)
         self._build_top_errors(left, r)
         self._build_line_chart(right, r)
+        self._build_recording_section(scroll, r)
 
     def _make_bar_fig(self, r):
         ja = r["joint_acc"]
@@ -432,6 +434,105 @@ class ReportScreen(ctk.CTkFrame):
         plt.close(fig)
         ctk.CTkLabel(parent, image=img, text="").pack()
         self._img2 = img
+
+    def _build_recording_section(self, parent, r):
+        import os
+        rec = r.get("recording") or {}
+        if not rec or not (rec.get("saved") or rec.get("failed") or rec.get("notice")):
+            return
+
+        card = ctk.CTkFrame(
+            parent, fg_color=C["card"], corner_radius=12,
+            border_width=1, border_color=C["border"],
+        )
+        card.grid(row=1, column=0, columnspan=2, sticky="ew", padx=14, pady=(0, 16))
+
+        ctk.CTkLabel(
+            card, text="Session Recording",
+            text_color=C["gold"], font=font_ui(12, "bold"), anchor="w",
+        ).pack(fill="x", padx=16, pady=(12, 4))
+
+        if rec.get("failed"):
+            ctk.CTkLabel(
+                card,
+                text=rec.get("notice") or "Recording failed — session data was not saved",
+                text_color=C["poor"], font=font_ui(11), anchor="w",
+            ).pack(fill="x", padx=16, pady=(0, 12))
+            return
+
+        path = rec.get("path") or ""
+        ctk.CTkLabel(
+            card, text=f"Saved to: {path}",
+            text_color=C["ivory"], font=font_ui(10), anchor="w", wraplength=1100, justify="left",
+        ).pack(fill="x", padx=16)
+        if rec.get("file_size_mb") is not None:
+            ctk.CTkLabel(
+                card, text=f"File size: {rec['file_size_mb']:.1f} MB",
+                text_color=C["muted"], font=font_ui(10), anchor="w",
+            ).pack(fill="x", padx=16, pady=(2, 0))
+        if rec.get("notice"):
+            ctk.CTkLabel(
+                card, text=rec["notice"],
+                text_color=C["gold"], font=font_ui(10, "bold"), anchor="w",
+            ).pack(fill="x", padx=16, pady=(4, 0))
+
+        count = int(rec.get("recordings_count") or 0)
+        best = rec.get("best_accuracy")
+        summary = f"Your previous sessions: {count} recording{'s' if count != 1 else ''} saved"
+        if best is not None:
+            summary += f"   ·   Best accuracy so far: {float(best):.0f}%"
+        ctk.CTkLabel(
+            card, text=summary,
+            text_color=C["ivory"], font=font_ui(11), anchor="w",
+        ).pack(fill="x", padx=16, pady=(8, 0))
+        if rec.get("new_personal_best"):
+            ctk.CTkLabel(
+                card, text="🏆 New personal best!",
+                text_color=C["gold"], font=font_ui(13, "bold"), anchor="w",
+            ).pack(fill="x", padx=16, pady=(2, 0))
+
+        row = ctk.CTkFrame(card, fg_color="transparent")
+        row.pack(fill="x", padx=16, pady=(10, 14))
+
+        def _open_file():
+            self._open_path(path)
+
+        def _open_folder():
+            folder = os.path.dirname(path) if path else ""
+            self._open_path(folder)
+
+        ctk.CTkButton(
+            row, text="Open Recording", width=160, height=34,
+            font=font_ui(11, "bold"), fg_color=C["gold"],
+            hover_color=C["gold_hover"], text_color=C["ink"],
+            corner_radius=8, command=_open_file,
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row, text="Open Recordings Folder", width=200, height=34,
+            font=font_ui(11, "bold"), fg_color=C["elevated"],
+            hover_color=C["card"], text_color=C["ivory"],
+            border_width=1, border_color=C["divider"],
+            corner_radius=8, command=_open_folder,
+        ).pack(side="left")
+
+    @staticmethod
+    def _open_path(path: str):
+        import os
+        import subprocess
+        import sys
+        import tkinter.messagebox as mb
+        if not path or not os.path.exists(path):
+            mb.showwarning("Recording", "That file is no longer available.")
+            return
+        try:
+            if sys.platform == "win32":
+                os.startfile(path)  # noqa: S606 — user-chosen local recording
+            elif sys.platform == "darwin":
+                subprocess.run(["open", path], check=False)
+            else:
+                subprocess.run(["xdg-open", path], check=False)
+        except OSError as exc:
+            mb.showerror("Recording", f"Could not open:\n{exc}")
 
     def _build_actions(self):
         bar = ctk.CTkFrame(self, fg_color=C["surface"], corner_radius=0)

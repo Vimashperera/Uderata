@@ -7,6 +7,7 @@ student dances. The reference plays reference_loops times (1 = no loop); the
 session ends when the last pass finishes (or the user stops early).
 """
 import os, time, threading, collections
+from datetime import datetime
 from typing import Callable, Optional, Dict, List
 import cv2, numpy as np
 import customtkinter as ctk
@@ -32,6 +33,8 @@ from core.motion_features import (
 )
 from core.soft_dtw import PhaseConstrainedAligner
 from config import ensure_expert_audio, resolve_expert_audio_path
+from core import session_recorder
+from core.session_history import summarize_session
 from ui.theme import C, font_display, font_ui
 
 try:
@@ -787,6 +790,18 @@ class PracticeScreen(ctk.CTkFrame):
         self._check_webcam_id = None
         self._session_gen = 0          # bumps each start; ignores stale after() callbacks
         self._loop_frames_read = 0     # frames shown in current expert loop
+        self._record_var = tk.IntVar(value=0)
+        self._recording_thread: Optional[session_recorder.RecordingThread] = None
+        self._is_recording = False
+        self._rec_last_t = 0.0
+        self._rec_expert = None
+        self._rec_student = None
+        self._rec_score = 0.0
+        self._rec_feedback = ""
+        self._rec_joint_scores: Dict = {}
+        self._low_streak = {name: 0 for name in ALL_JOINT_NAMES}
+        self._rec_blink_on = False
+        self._rec_blink_id = None
 
         self._build_ui()
 
@@ -871,6 +886,11 @@ class PracticeScreen(ctk.CTkFrame):
             bar, text="Live: —fps", text_color=C["muted"], font=font_ui(9)
         )
         self._fps_lbl.grid(row=0, column=4, padx=12)
+
+        self._rec_lbl = ctk.CTkLabel(
+            bar, text="", text_color="#E85D5D", font=font_ui(11, "bold"), width=70,
+        )
+        self._rec_lbl.grid(row=0, column=5, padx=(0, 12))
 
     def _build_col1(self):
         col = ctk.CTkFrame(self,fg_color=C["panel"],corner_radius=0)
@@ -971,15 +991,6 @@ class PracticeScreen(ctk.CTkFrame):
             self._dot_labels[jname] = dot
             self._dev_labels[jname] = dev_lbl
 
-        ctk.CTkFrame(col,fg_color=C["divider"],height=1).pack(fill="x",padx=10,pady=6)
-
-        # Start/End button
-        self._action_btn = ctk.CTkButton(col,text="▶ START",width=140,height=42,
-            font=font_ui(12,"bold"),fg_color=C["gold"],
-            hover_color=C["gold_hover"],text_color=C["ink"],
-            corner_radius=8,command=self._start_session)
-        self._action_btn.pack(pady=6)
-
     def _build_col3(self):
         col = ctk.CTkFrame(self,fg_color=C["panel"],corner_radius=0)
         col.grid(row=1,column=4,sticky="nsew")
@@ -1014,13 +1025,35 @@ class PracticeScreen(ctk.CTkFrame):
             font=("Georgia",80,"bold"),text_color=C["gold"],fg_color="transparent")
 
     def _build_bottombar(self):
-        bar = ctk.CTkFrame(self,fg_color=C["card"],height=44,corner_radius=0)
-        bar.grid(row=2,column=0,columnspan=5,sticky="ew")
-        bar.columnconfigure(0,weight=1)
-        self._feedback_lbl = ctk.CTkLabel(bar,
-            text="Press START when you are ready.",
-            text_color=C["offwhite"],font=("Segoe UI",11,"italic"))
-        self._feedback_lbl.grid(row=0,column=0,padx=20,pady=10)
+        bar = ctk.CTkFrame(self, fg_color=C["card"], height=56, corner_radius=0)
+        bar.grid(row=2, column=0, columnspan=5, sticky="ew")
+        bar.grid_propagate(False)
+        bar.columnconfigure(0, weight=1)
+
+        self._feedback_lbl = ctk.CTkLabel(
+            bar,
+            text="Tick Record if you want a video, then press START.",
+            text_color=C["offwhite"], font=("Segoe UI", 11, "italic"), anchor="w",
+        )
+        self._feedback_lbl.grid(row=0, column=0, padx=16, pady=8, sticky="ew")
+
+        self._record_check = ctk.CTkCheckBox(
+            bar, text="Record this session",
+            variable=self._record_var,
+            onvalue=1, offvalue=0,
+            text_color=C["ivory"], fg_color=C["gold"],
+            hover_color=C["gold_hover"], border_color=C["gold_dim"],
+            font=font_ui(12, "bold"),
+        )
+        self._record_check.grid(row=0, column=1, padx=(8, 12), pady=8)
+
+        self._action_btn = ctk.CTkButton(
+            bar, text="▶ START", width=150, height=36,
+            font=font_ui(13, "bold"), fg_color=C["gold"],
+            hover_color=C["gold_hover"], text_color=C["ink"],
+            corner_radius=8, command=self._start_session,
+        )
+        self._action_btn.grid(row=0, column=2, padx=(0, 16), pady=8)
 
     # ═══════════════════════ GAUGE ════════════════════════════════════════════
 
@@ -1159,6 +1192,7 @@ class PracticeScreen(ctk.CTkFrame):
         # Start pose thread and proceed with countdown (pose thread will operate on synthetic frames if needed)
         if self._pose_thread and not self._pose_thread.is_alive():
             self._pose_thread.start()
+        self._arm_recording()
         self._run_countdown(5)
 
     def _run_countdown(self, n: int):
@@ -1247,6 +1281,10 @@ class PracticeScreen(ctk.CTkFrame):
         self._start_loop_audio()
         # Arm video clock with audio so decode/UI lag cannot drag the expert behind the beat
         self._rep_start_time = time.time()
+        self._low_streak = {name: 0 for name in ALL_JOINT_NAMES}
+        self._rec_last_t = 0.0
+        if self._is_recording:
+            self._start_rec_indicator()
         self._ui_update()
 
     def _end_session_user(self):
@@ -1360,6 +1398,7 @@ class PracticeScreen(ctk.CTkFrame):
         # Clean up resources
         if self._exp_cap:
             self._exp_cap.release(); self._exp_cap = None
+        recording_info = self._finalize_recording(duration)
         # Build session_data
         p3 = {}
         if self._pose_thread and hasattr(self._pose_thread, "get_phase3_histories"):
@@ -1381,6 +1420,7 @@ class PracticeScreen(ctk.CTkFrame):
             "practice_reps_target": self._reference_loops,  # alias for older report code
             "practice_rep_at_end": self._practice_loop,
             "session_phase_at_end": getattr(self, "_session_phase", "idle"),
+            "recording": recording_info,
         }
         self.on_session_end(session_data)
 
@@ -1397,7 +1437,192 @@ class PracticeScreen(ctk.CTkFrame):
             self.after_cancel(self._after_id)
         self._stop_event.set()
         if self._exp_cap: self._exp_cap.release(); self._exp_cap = None
+        if self._recording_thread is not None:
+            self._finalize_recording(time.time() - getattr(self, "_session_start", time.time()))
         self.on_back()
+
+    # ═══════════════════════ SESSION RECORDING ════════════════════════════════
+
+    def _style_header(self) -> str:
+        try:
+            import config
+            if self._style_id:
+                title = config.get_style(self._style_id)["title"]
+                return f"{title} Dance Learning System"
+        except Exception:
+            pass
+        return "Dance Learning System"
+
+    def _arm_recording(self):
+        """Start the writer before countdown. Failure never blocks practice."""
+        self._is_recording = False
+        self._stop_rec_indicator()
+        if not self._record_var.get():
+            return
+        import tkinter.messagebox as mb
+        try:
+            folder = session_recorder.ensure_recordings_dir()
+        except OSError:
+            self._record_var.set(0)
+            if hasattr(self, "_record_check"):
+                self._record_check.configure(state="disabled")
+            mb.showwarning(
+                "Recording",
+                "Cannot save recording — check folder permissions",
+            )
+            return
+        try:
+            free = session_recorder.free_bytes(folder)
+        except OSError:
+            free = 0
+        if free < session_recorder.MIN_FREE_BYTES:
+            self._record_var.set(0)
+            mb.showwarning("Recording", "Low disk space — recording disabled")
+            return
+        path = session_recorder.new_recording_path(self._step_title)
+        thread = session_recorder.RecordingThread(
+            path, fps=session_recorder.RECORD_FPS, frame_size=session_recorder.FRAME_SIZE,
+        )
+        thread.start()
+        thread.ready.wait(timeout=2.0)
+        if thread.failed or not thread.ready.is_set():
+            print("[recording] Disabled for this session — writer did not start")
+            thread.stop()
+            thread.join(timeout=2.0)
+            self._recording_thread = None
+            return
+        self._recording_thread = thread
+        self._is_recording = True
+        if hasattr(self, "_record_check"):
+            self._record_check.configure(state="disabled")
+
+    def _enqueue_recording_frame(self, elapsed: float):
+        thread = self._recording_thread
+        if not self._is_recording or thread is None or thread.failed:
+            if thread is not None and thread.failed:
+                self._is_recording = False
+                self._stop_rec_indicator()
+            return
+        if self._session_phase != "practice":
+            return
+        if elapsed - self._rec_last_t < (1.0 / session_recorder.RECORD_FPS):
+            return
+        self._rec_last_t = elapsed
+        scores = self._rec_joint_scores or {}
+        mistake = ""
+        hot = [
+            name for name, streak in self._low_streak.items()
+            if streak > 10
+        ]
+        if hot:
+            hot.sort(key=lambda name: self._low_streak.get(name, 0), reverse=True)
+            mistake = session_recorder.mistake_label(hot[0])
+        composite = session_recorder.build_recording_frame(
+            expert_frame=self._rec_expert,
+            student_frame=self._rec_student,
+            joint_scores=scores,
+            overall_score=self._rec_score,
+            feedback=self._rec_feedback,
+            timestamp=elapsed,
+            step_name=self._step_title,
+            header_left=self._style_header(),
+            mistake_text=mistake,
+        )
+        thread.add_frame(composite)
+
+    def _finalize_recording(self, duration: float) -> dict:
+        self._stop_rec_indicator()
+        thread = self._recording_thread
+        self._is_recording = False
+        self._recording_thread = None
+        info = {
+            "saved": False,
+            "failed": False,
+            "path": None,
+            "file_size_mb": None,
+            "recordings_count": 0,
+            "best_accuracy": None,
+            "new_personal_best": False,
+            "notice": "",
+        }
+        if thread is None:
+            return info
+        thread.stop()
+        thread.join(timeout=10)
+        path = thread.output_path
+        if thread.failed or thread.frames_written < 1 or not os.path.isfile(path):
+            info["failed"] = True
+            info["notice"] = "Recording failed — session data was not saved"
+            return info
+        size_mb = os.path.getsize(path) / (1024 * 1024)
+        phase3 = {}
+        if self._pose_thread and hasattr(self._pose_thread, "get_phase3_histories"):
+            phase3 = self._pose_thread.get_phase3_histories() or {}
+        summary = summarize_session({
+            "step_id": self._step_id,
+            "style_id": self._style_id,
+            "step_name": self._step_title,
+            "duration_seconds": duration,
+            "frame_accuracies": list(self._frame_acc),
+            "form_accuracies": phase3.get("form") or list(self._frame_acc),
+            "timing_accuracies": phase3.get("timing") or [],
+            "lag_ms_history": phase3.get("lag_ms") or [],
+            "joint_histories": {k: list(v) for k, v in self._joint_hist.items()},
+            "joint_deviations": {k: list(v) for k, v in self._joint_dev_hist.items()},
+            "ended_by": "recording",
+        })
+        now = datetime.now()
+        entry = {
+            "filename": os.path.basename(path),
+            "path": path,
+            "step": self._step_title,
+            "step_id": self._step_id,
+            "style_id": self._style_id,
+            "date": now.strftime("%Y-%m-%d"),
+            "time": now.strftime("%H:%M:%S"),
+            "duration_seconds": round(float(duration), 1),
+            "overall_accuracy": round(float(summary["overall"]), 1),
+            "star_rating": int(summary["stars"]),
+            "top_errors": [
+                name for name, _acc in sorted(
+                    summary["joint_acc"].items(), key=lambda item: item[1]
+                )[:3]
+            ],
+            "file_size_mb": round(size_mb, 1),
+        }
+        stats = session_recorder.append_recording_index(entry)
+        info.update({
+            "saved": True,
+            "path": path,
+            "file_size_mb": round(size_mb, 1),
+            "recordings_count": stats["recordings_count"],
+            "best_accuracy": stats["best_accuracy"],
+            "new_personal_best": stats["new_personal_best"],
+            "notice": "Recording saved",
+        })
+        return info
+
+    def _start_rec_indicator(self):
+        self._rec_blink_on = True
+        self._blink_rec()
+
+    def _blink_rec(self):
+        self._rec_blink_id = None
+        if not self._is_recording or not hasattr(self, "_rec_lbl"):
+            return
+        self._rec_blink_on = not self._rec_blink_on
+        self._rec_lbl.configure(text="● REC" if self._rec_blink_on else "")
+        self._rec_blink_id = self.after(1000, self._blink_rec)
+
+    def _stop_rec_indicator(self):
+        if self._rec_blink_id is not None:
+            try:
+                self.after_cancel(self._rec_blink_id)
+            except Exception:
+                pass
+            self._rec_blink_id = None
+        if hasattr(self, "_rec_lbl"):
+            self._rec_lbl.configure(text="")
 
     # ═══════════════════════ UI UPDATE LOOP ═══════════════════════════════════
 
@@ -1456,6 +1681,7 @@ class PracticeScreen(ctk.CTkFrame):
 
                 if exp_frame is not None:
                     lb = _letterbox(exp_frame, self.EXP_W, self.EXP_H)
+                    self._rec_expert = lb
                     photo = ImageTk.PhotoImage(
                         Image.fromarray(cv2.cvtColor(lb, cv2.COLOR_BGR2RGB)))
                     self._exp_photo = photo
@@ -1486,6 +1712,7 @@ class PracticeScreen(ctk.CTkFrame):
         result_frame = self._result_slot.latest()
         if result_frame is not None:
             lb2 = _letterbox(result_frame, self.CAM_W, self.CAM_H)
+            self._rec_student = lb2
             photo2 = ImageTk.PhotoImage(
                 Image.fromarray(cv2.cvtColor(lb2, cv2.COLOR_BGR2RGB)))
             self._cam_photo = photo2
@@ -1498,6 +1725,7 @@ class PracticeScreen(ctk.CTkFrame):
             raw_frame = self._raw_slot.latest()
             if raw_frame is not None:
                 lb2 = _letterbox(raw_frame, self.CAM_W, self.CAM_H)
+                self._rec_student = lb2
                 photo2 = ImageTk.PhotoImage(
                     Image.fromarray(cv2.cvtColor(lb2, cv2.COLOR_BGR2RGB)))
                 self._cam_photo = photo2
@@ -1559,6 +1787,15 @@ class PracticeScreen(ctk.CTkFrame):
                 tip = "Speed up a little." if lag_ms < 0 else "Hold back — you're ahead of the beat."
                 fb = f"{fb}  ·  {tip}"
             self._feedback_lbl.configure(text=fb)
+            self._rec_score = acc
+            self._rec_feedback = fb
+            self._rec_joint_scores = dict(joint_scores)
+            for jname, _abbr in session_recorder.JOINT_ROW:
+                raw = joint_scores.get(jname)
+                if raw is not None and float(raw) < 40:
+                    self._low_streak[jname] = self._low_streak.get(jname, 0) + 1
+                else:
+                    self._low_streak[jname] = 0
 
         # ── Timer ─────────────────────────────────────────────────────────────
         elapsed = time.time() - self._session_start
@@ -1573,6 +1810,8 @@ class PracticeScreen(ctk.CTkFrame):
                 self._fps_val = 30 / (now - self._fps_t0)
                 self._fps_lbl.configure(text=f"Live: {self._fps_val:.0f}fps")
             self._fps_t0 = now; self._fps_counter = 0
+
+        self._enqueue_recording_frame(elapsed)
 
         # ── Schedule next update ──────────────────────────────────────────────
         if not self._running or self._ending:
@@ -1650,6 +1889,10 @@ class PracticeScreen(ctk.CTkFrame):
         for k in self._joint_dev_hist:
             self._joint_dev_hist[k].clear()
         self._angle_buf.clear()
+        self._stop_rec_indicator()
+        self._is_recording = False
+        if hasattr(self, "_record_check"):
+            self._record_check.configure(state="normal")
         # 8. Reset action button → START
         if hasattr(self, '_action_btn'):
             self._action_btn.configure(
