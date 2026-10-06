@@ -1,6 +1,6 @@
 """
 screen_report.py  —  Screen 4: Performance Report
-Black & gold session summary. Consumes session_data from Screen 3.
+Session summary in the active tradition color. Consumes session_data from Screen 3.
 """
 import io
 import math
@@ -194,14 +194,19 @@ class ReportScreen(ctk.CTkFrame):
         left.grid(row=0, column=0, padx=22, pady=12, sticky="w")
 
         ctk.CTkLabel(
-            left, text=f"Session Complete — {r['step_name']}",
-            text_color=C["gold"], font=font_display(18, "bold"),
+            left, text="Session complete",
+            text_color=C["muted"], font=font_ui(12),
         ).pack(anchor="w")
 
-        style_bit = r.get("style_title") or r.get("style_id") or ""
-        meta = f"{style_bit}  ·  {self._fmt_ts(r['timestamp'])}" if style_bit else self._fmt_ts(r["timestamp"])
         ctk.CTkLabel(
-            left, text=meta, text_color=C["muted"], font=font_ui(10),
+            left, text=r["step_name"],
+            text_color=C["gold"], font=font_display(22, "bold"),
+        ).pack(anchor="w", pady=(2, 0))
+
+        style_bit = r.get("style_title") or r.get("style_id") or ""
+        meta = f"{style_bit}    {self._fmt_ts(r['timestamp'])}" if style_bit else self._fmt_ts(r["timestamp"])
+        ctk.CTkLabel(
+            left, text=meta, text_color=C["muted"], font=font_ui(12),
         ).pack(anchor="w", pady=(2, 0))
 
         star_row = ctk.CTkFrame(left, fg_color="transparent")
@@ -216,17 +221,15 @@ class ReportScreen(ctk.CTkFrame):
         m, s = int(dur) // 60, int(dur) % 60
         ctk.CTkLabel(
             left, text=f"Duration: {m} min {s} sec",
-            text_color=C["muted"], font=font_ui(10),
+            text_color=C["muted"], font=font_ui(12),
         ).pack(anchor="w", pady=(2, 0))
 
+        lag_bit = f"     Average lag {r['avg_lag_ms']:.0f} ms" if r.get("avg_lag_ms", 0) > 1 else ""
         ctk.CTkLabel(
             left,
-            text=(
-                f"Form {r['form']:.0f}%  ·  Timing {r['timing']:.0f}%"
-                + (f"  ·  avg lag {r['avg_lag_ms']:.0f} ms" if r.get("avg_lag_ms", 0) > 1 else "")
-            ),
-            text_color=C["ivory"], font=font_ui(11, "bold"),
-        ).pack(anchor="w", pady=(4, 0))
+            text=f"Form {r['form']:.0f}%     Timing {r['timing']:.0f}%{lag_bit}",
+            text_color=C["ivory"], font=font_ui(13, "bold"),
+        ).pack(anchor="w", pady=(6, 0))
 
         if r.get("form_comparison"):
             ctk.CTkLabel(
@@ -278,7 +281,7 @@ class ReportScreen(ctk.CTkFrame):
             )
         c.create_text(
             cx, cy, text=f"{value:.0f}%",
-            fill=C["ivory"], font=("Georgia", 13, "bold"),
+            fill=C["ivory"], font=font_display(14, "bold"),
         )
 
     def _build_body(self, r):
@@ -287,13 +290,18 @@ class ReportScreen(ctk.CTkFrame):
         scroll.columnconfigure(0, weight=1)
         scroll.columnconfigure(1, weight=1)
 
+        wide = self.winfo_width() < 100 or self.winfo_width() >= 1080
         left = ctk.CTkFrame(scroll, fg_color="transparent")
-        left.grid(row=0, column=0, sticky="nsew", padx=(14, 6), pady=12)
-        left.columnconfigure(0, weight=1)
-
         right = ctk.CTkFrame(scroll, fg_color="transparent")
-        right.grid(row=0, column=1, sticky="nsew", padx=(6, 14), pady=12)
+        left.columnconfigure(0, weight=1)
         right.columnconfigure(0, weight=1)
+        if wide:
+            left.grid(row=0, column=0, sticky="nsew", padx=(16, 8), pady=16)
+            right.grid(row=0, column=1, sticky="nsew", padx=(8, 16), pady=16)
+        else:
+            scroll.columnconfigure(1, weight=0)
+            left.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=16, pady=(16, 8))
+            right.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=16, pady=(8, 16))
 
         self._build_bar_chart(left, r)
         self._build_top_errors(left, r)
@@ -361,7 +369,7 @@ class ReportScreen(ctk.CTkFrame):
     def _build_bar_chart(self, parent, r):
         ctk.CTkLabel(
             parent, text="Joint Accuracy Breakdown",
-            text_color=C["gold"], font=font_ui(12, "bold"), anchor="w",
+            text_color=C["gold"], font=font_ui(14, "bold"), anchor="w",
         ).pack(fill="x", pady=(0, 6))
 
         if not r["joint_acc"]:
@@ -378,7 +386,7 @@ class ReportScreen(ctk.CTkFrame):
     def _build_top_errors(self, parent, r):
         ctk.CTkLabel(
             parent, text="Top 3 Corrections Needed",
-            text_color=C["gold"], font=font_ui(12, "bold"), anchor="w",
+            text_color=C["gold"], font=font_ui(14, "bold"), anchor="w",
         ).pack(fill="x", pady=(14, 6))
 
         for err in r["top_errors"]:
@@ -417,7 +425,7 @@ class ReportScreen(ctk.CTkFrame):
     def _build_line_chart(self, parent, r):
         ctk.CTkLabel(
             parent, text="Form Over Time",
-            text_color=C["gold"], font=font_ui(12, "bold"), anchor="w",
+            text_color=C["gold"], font=font_ui(14, "bold"), anchor="w",
         ).pack(fill="x", pady=(0, 6))
 
         history = r["history"]
@@ -449,7 +457,7 @@ class ReportScreen(ctk.CTkFrame):
 
         ctk.CTkLabel(
             card, text="Session Recording",
-            text_color=C["gold"], font=font_ui(12, "bold"), anchor="w",
+            text_color=C["gold"], font=font_ui(14, "bold"), anchor="w",
         ).pack(fill="x", padx=16, pady=(12, 4))
 
         if rec.get("failed"):
@@ -545,31 +553,33 @@ class ReportScreen(ctk.CTkFrame):
         row = ctk.CTkFrame(bar, fg_color=C["surface"], corner_radius=0)
         row.pack(fill="x")
 
-        for text, fg, cmd in [
-            ("↩  Practice Again", C["gold"], self.on_practice_again),
-            ("Watch Expert Again", C["elevated"], self.on_watch_expert),
-            ("Return to Menu", C["elevated"], self.on_menu),
+        for text, primary, cmd in [
+            ("Practice again", True, self.on_practice_again),
+            ("Watch expert", False, self.on_watch_expert),
+            ("Back to steps", False, self.on_menu),
         ]:
-            kwargs = {
-                "text": text, "width": 185, "height": 40,
-                "font": font_ui(11, "bold"), "fg_color": fg,
-                "hover_color": C["gold_hover"], "corner_radius": 8, "command": cmd,
-            }
-            if fg == C["gold"]:
-                kwargs["text_color"] = C["ink"]
+            if primary:
+                kwargs = dict(
+                    fg_color=C["gold"], hover_color=C["gold_hover"],
+                    text_color=C["ink"],
+                )
             else:
-                kwargs["text_color"] = C["ivory"]
-                kwargs["border_width"] = 1
-                kwargs["border_color"] = C["divider"]
-            ctk.CTkButton(row, **kwargs).pack(side="left", padx=8, pady=12)
+                kwargs = dict(
+                    fg_color=C["surface"], hover_color=C["elevated"],
+                    text_color=C["ivory"], border_width=1, border_color=C["divider"],
+                )
+            ctk.CTkButton(
+                row, text=text, width=168, height=40,
+                font=font_ui(13, "bold"), corner_radius=4, command=cmd, **kwargs,
+            ).pack(side="left", padx=8, pady=12)
 
         ctk.CTkButton(
-            row, text="Export PDF", width=145, height=40,
-            font=font_ui(11, "bold"), fg_color=C["card"],
-            hover_color=C["gold_deep"], text_color=C["muted"],
+            row, text="Export PDF", width=140, height=40,
+            font=font_ui(13), fg_color=C["surface"],
+            hover_color=C["elevated"], text_color=C["ivory"],
             border_width=1, border_color=C["divider"],
-            corner_radius=8, command=self._export_pdf,
-        ).pack(side="right", padx=14, pady=12)
+            corner_radius=4, command=self._export_pdf,
+        ).pack(side="right", padx=16, pady=12)
 
     def _export_pdf(self):
         try:

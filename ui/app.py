@@ -1,5 +1,6 @@
 """
-app.py — Screen manager for multi-style dance learner (1280×720).
+app.py — Screen manager for the multi-style dance learner.
+The window follows the display; tradition color is visual only.
 """
 from datetime import datetime
 
@@ -8,7 +9,7 @@ import tkinter.messagebox as mb
 
 import config
 from core import session_history as hist
-from ui.theme import C, apply_app_chrome
+from ui.theme import C, apply_app_chrome, activate_style, fit_window
 from ui.screen_style import StyleScreen
 from ui.screen_menu import MenuScreen
 from ui.screen_preview import PreviewScreen
@@ -25,14 +26,8 @@ class App(ctk.CTk):
         hist.init_db()
 
         self.title(config.APP_NAME)
-        self.geometry("1280x720")
-        self.resizable(False, False)
-
-        self.update_idletasks()
-        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
-        self.geometry(f"1280x720+{(sw-1280)//2}+{(sh-720)//2}")
-
         self.configure(fg_color=C["bg"])
+        fit_window(self)
 
         self._container = ctk.CTkFrame(self, fg_color=C["bg"], corner_radius=0)
         self._container.pack(fill="both", expand=True)
@@ -140,7 +135,14 @@ class App(ctk.CTk):
         self._active_step_id = config.STEP_ID
         style = config.get_style(style_id)
         self.title(f"{config.APP_NAME} — {style['title']}")
+        activate_style(style_id)
         self._screens["menu"].configure_style(style_id)
+        preview = self._screens.get("preview")
+        if preview is not None and hasattr(preview, "restyle"):
+            preview.restyle()
+        practice = self._screens.get("practice")
+        if practice is not None and hasattr(practice, "restyle"):
+            practice.restyle()
         self.show_screen("menu")
 
     def _on_step_selected(self, step_id: str):

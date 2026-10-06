@@ -1,6 +1,6 @@
 """
 screen_practice.py - Screen 3: Live Practice
-3-column layout (486/308/486). Threads: Capture, Pose (+ UI update loop).
+3-column layout that scales with the window. Threads: Capture, Pose (+ UI update loop).
 
 Flow: after countdown, the expert reference video (+ audio) plays while the
 student dances. The reference plays reference_loops times (1 = no loop); the
@@ -709,7 +709,7 @@ def _beep():
 
 
 class PracticeScreen(ctk.CTkFrame):
-    """Screen 3 - Live Practice (3-column fixed layout, 3 threads)."""
+    """Screen 3 - Live Practice (3-column layout, 3 threads)."""
 
     EXP_W,EXP_H = 480,270   # expert video display size
     CAM_W,CAM_H = 480,270   # webcam display size
@@ -822,220 +822,231 @@ class PracticeScreen(ctk.CTkFrame):
         self._audio_wav_path = audio_path or resolve_expert_audio_path(video_path)
         self._expert_loader = ExpertDataLoader(json_path)
         if hasattr(self, "_title_lbl"):
-            self._title_lbl.configure(text=f"{self._step_title} — Live Practice")
+            self._title_lbl.configure(text=self._step_title)
+        self.restyle()
 
     # ═══════════════════════ UI BUILD ═════════════════════════════════════════
 
     def _build_ui(self):
-        self.columnconfigure(0, minsize=486, weight=0)
+        self.columnconfigure(0, minsize=280, weight=1)
         self.columnconfigure(1, minsize=1,   weight=0)
-        self.columnconfigure(2, minsize=308, weight=0)
+        self.columnconfigure(2, minsize=236, weight=0)
         self.columnconfigure(3, minsize=1,   weight=0)
-        self.columnconfigure(4, minsize=486, weight=0)
+        self.columnconfigure(4, minsize=280, weight=1)
         self.rowconfigure(0, weight=0)
         self.rowconfigure(1, weight=1)
         self.rowconfigure(2, weight=0)
 
-        # Top bar
+        self._accent_labels = []
         self._build_topbar()
-        # Dividers
-        ctk.CTkFrame(self,fg_color=C["divider"],width=1,corner_radius=0).grid(
-            row=1,column=1,sticky="ns")
-        ctk.CTkFrame(self,fg_color=C["divider"],width=1,corner_radius=0).grid(
-            row=1,column=3,sticky="ns")
-        # 3 columns
+        ctk.CTkFrame(self, fg_color=C["divider"], width=1, corner_radius=0).grid(
+            row=1, column=1, sticky="ns")
+        ctk.CTkFrame(self, fg_color=C["divider"], width=1, corner_radius=0).grid(
+            row=1, column=3, sticky="ns")
         self._build_col1()
         self._build_col2()
         self._build_col3()
-        # Bottom feedback bar
         self._build_bottombar()
+        self.bind("<Configure>", self._schedule_fit)
 
     def _build_topbar(self):
         wrap = ctk.CTkFrame(self, fg_color=C["surface"], corner_radius=0)
         wrap.grid(row=0, column=0, columnspan=5, sticky="ew")
         wrap.columnconfigure(0, weight=1)
+        self._top_wrap = wrap
 
-        ctk.CTkFrame(wrap, fg_color=C["gold"], height=2, corner_radius=0).grid(
-            row=0, column=0, sticky="ew"
-        )
+        self._rule = ctk.CTkFrame(wrap, fg_color=C["gold"], height=3, corner_radius=0)
+        self._rule.grid(row=0, column=0, sticky="ew")
 
-        bar = ctk.CTkFrame(wrap, fg_color=C["surface"], height=44, corner_radius=0)
+        bar = ctk.CTkFrame(wrap, fg_color=C["surface"], height=52, corner_radius=0)
         bar.grid(row=1, column=0, sticky="ew")
         bar.columnconfigure(2, weight=1)
+        self._top_bar = bar
 
         ctk.CTkButton(
-            bar, text="← Back", width=80, height=30,
-            fg_color="transparent", hover_color=C["elevated"],
-            text_color=C["muted"], font=font_ui(10),
-            border_width=1, border_color=C["divider"], corner_radius=6,
+            bar, text="Back", width=84, height=32,
+            fg_color=C["bg"], hover_color=C["elevated"],
+            text_color=C["ivory"], font=font_ui(13),
+            border_width=1, border_color=C["divider"], corner_radius=4,
             command=self._stop_and_back,
-        ).grid(row=0, column=0, padx=8, pady=6)
+        ).grid(row=0, column=0, padx=12, pady=8)
 
         self._title_lbl = ctk.CTkLabel(
-            bar, text=f"{self._step_title} — Live Practice",
-            text_color=C["ivory"], font=font_ui(12, "bold"),
+            bar, text=f"{self._step_title}",
+            text_color=C["ivory"], font=font_ui(15, "bold"),
         )
-        self._title_lbl.grid(row=0, column=1, padx=8)
+        self._title_lbl.grid(row=0, column=1, padx=8, sticky="w")
 
         self._timer_lbl = ctk.CTkLabel(
-            bar, text="⏱ 0:00", text_color=C["gold"], font=font_ui(12, "bold")
+            bar, text="0:00", text_color=C["gold"], font=font_ui(14, "bold")
         )
         self._timer_lbl.grid(row=0, column=3, padx=8)
+        self._accent_labels.append(self._timer_lbl)
 
         self._fps_lbl = ctk.CTkLabel(
-            bar, text="Live: —fps", text_color=C["muted"], font=font_ui(9)
+            bar, text="Live", text_color=C["muted"], font=font_ui(12)
         )
         self._fps_lbl.grid(row=0, column=4, padx=12)
 
         self._rec_lbl = ctk.CTkLabel(
-            bar, text="", text_color="#E85D5D", font=font_ui(11, "bold"), width=70,
+            bar, text="", text_color=C["poor"], font=font_ui(12, "bold"), width=72,
         )
-        self._rec_lbl.grid(row=0, column=5, padx=(0, 12))
+        self._rec_lbl.grid(row=0, column=5, padx=(0, 14))
 
     def _build_col1(self):
-        col = ctk.CTkFrame(self,fg_color=C["panel"],corner_radius=0)
-        col.grid(row=1,column=0,sticky="nsew")
-        col.columnconfigure(0,weight=1)
+        col = ctk.CTkFrame(self, fg_color=C["panel"], corner_radius=0)
+        col.grid(row=1, column=0, sticky="nsew")
+        col.columnconfigure(0, weight=1)
+        self._col1 = col
 
-        ctk.CTkLabel(col,text="Expert Reference",text_color=C["gold"],
-            font=("Segoe UI",11,"bold")).pack(pady=(8,4))
+        heading = ctk.CTkLabel(
+            col, text="Expert reference", text_color=C["gold"],
+            font=font_ui(14, "bold"))
+        heading.pack(pady=(12, 6))
+        self._accent_labels.append(heading)
 
-        # Expert video label (fixed 480x270)
-        vc = ctk.CTkFrame(col,fg_color="#000",corner_radius=6,
-                          width=self.EXP_W,height=self.EXP_H)
-        vc.pack(padx=3,pady=2)
+        vc = ctk.CTkFrame(
+            col, fg_color=C["stage"], corner_radius=2,
+            width=self.EXP_W, height=self.EXP_H)
+        vc.pack(padx=12, pady=2)
         vc.pack_propagate(False)
-        self._exp_lbl = ctk.CTkLabel(vc,text="Loading…",fg_color="#000",
-            text_color=C["muted"])
-        self._exp_lbl.pack(fill="both",expand=True)
+        self._exp_frame = vc
+        self._exp_lbl = ctk.CTkLabel(
+            vc, text="Loading…", fg_color=C["stage"],
+            text_color=C["stage_text"], font=font_ui(13))
+        self._exp_lbl.pack(fill="both", expand=True)
 
-        # Angle readout table
-        ctk.CTkLabel(col,text="Current Expert Angles",text_color=C["muted"],
-            font=("Segoe UI",9,"bold")).pack(pady=(6,2))
+        ctk.CTkLabel(
+            col, text="Expert angles", text_color=C["muted"],
+            font=font_ui(12)).pack(pady=(10, 4))
 
-        tbl = ctk.CTkFrame(col,fg_color=C["surface"],corner_radius=6)
-        tbl.pack(fill="x",padx=6,pady=2)
+        tbl = ctk.CTkFrame(col, fg_color=C["surface"], corner_radius=4)
+        tbl.pack(fill="x", padx=12, pady=2)
 
         for jname in ALL_JOINT_NAMES:
-            row = ctk.CTkFrame(tbl,fg_color="transparent")
-            row.pack(fill="x",padx=6,pady=1)
-            ctk.CTkLabel(row,text=SHORT_NAMES.get(jname,jname),
-                text_color=C["muted"],font=("Segoe UI",9),
-                width=70,anchor="w").pack(side="left")
+            row = ctk.CTkFrame(tbl, fg_color="transparent")
+            row.pack(fill="x", padx=8, pady=1)
+            ctk.CTkLabel(
+                row, text=SHORT_NAMES.get(jname, jname),
+                text_color=C["muted"], font=font_ui(12),
+                width=78, anchor="w").pack(side="left")
             var = tk.StringVar(value="—°")
             self._exp_angle_vars[jname] = var
-            ctk.CTkLabel(row,textvariable=var,text_color=C["gold"],
-                font=("Segoe UI",9,"bold"),width=55,anchor="e").pack(side="right")
+            val = ctk.CTkLabel(
+                row, textvariable=var, text_color=C["gold"],
+                font=font_ui(12, "bold"), width=58, anchor="e")
+            val.pack(side="right")
+            self._accent_labels.append(val)
 
         self._rep_status = ctk.CTkLabel(
-            col,
-            text="",
-            text_color=C["gold"],
-            font=("Georgia", 26, "bold"),
+            col, text="", text_color=C["gold"],
+            font=font_display(22, "bold"),
         )
-        self._rep_status.pack(pady=(4, 2))
+        self._rep_status.pack(pady=(8, 6))
+        self._accent_labels.append(self._rep_status)
 
     def _build_col2(self):
-        col = ctk.CTkFrame(self,fg_color=C["surface"],corner_radius=0)
-        col.grid(row=1,column=2,sticky="nsew")
-        col.columnconfigure(0,weight=1)
+        col = ctk.CTkFrame(self, fg_color=C["surface"], corner_radius=0)
+        col.grid(row=1, column=2, sticky="nsew")
+        col.columnconfigure(0, weight=1)
+        self._col2 = col
 
-        # Timer
-        self._hud_timer = ctk.CTkLabel(col,text="0:00",
-            text_color=C["gold"],font=("Georgia",22,"bold"))
-        self._hud_timer.pack(pady=(14,4))
+        self._hud_timer = ctk.CTkLabel(
+            col, text="0:00", text_color=C["gold"], font=font_display(26, "bold"))
+        self._hud_timer.pack(pady=(18, 2))
+        self._accent_labels.append(self._hud_timer)
 
-        ctk.CTkLabel(col,text="FORM",text_color=C["muted"],
-            font=("Segoe UI",8,"bold")).pack()
+        ctk.CTkLabel(
+            col, text="Form", text_color=C["muted"], font=font_ui(12)).pack()
 
-        # Gauge canvas
-        self._gauge_canvas = tk.Canvas(col,width=150,height=150,
-            bg=C["surface"],highlightthickness=0)
+        self._gauge_canvas = tk.Canvas(
+            col, width=150, height=150, bg=C["surface"], highlightthickness=0)
         self._gauge_canvas.pack(pady=4)
         self._draw_gauge(0)
 
-        self._gauge_pct = ctk.CTkLabel(col,text="—",
-            text_color=C["good"],font=("Georgia",16,"bold"))
+        self._gauge_pct = ctk.CTkLabel(
+            col, text="—", text_color=C["good"], font=font_display(18, "bold"))
         self._gauge_pct.pack()
 
         self._timing_lbl = ctk.CTkLabel(
-            col, text="Timing: —",
-            text_color=C["muted"], font=("Segoe UI", 10, "bold"),
-        )
-        self._timing_lbl.pack(pady=(2, 0))
+            col, text="Timing", text_color=C["muted"], font=font_ui(13, "bold"))
+        self._timing_lbl.pack(pady=(4, 0))
         self._lag_lbl = ctk.CTkLabel(
-            col, text="",
-            text_color=C["muted"], font=("Segoe UI", 9),
-        )
+            col, text="", text_color=C["muted"], font=font_ui(12))
         self._lag_lbl.pack()
 
-        ctk.CTkFrame(col,fg_color=C["divider"],height=1).pack(fill="x",padx=10,pady=8)
-        ctk.CTkLabel(col,text="JOINT STATUS",text_color=C["muted"],
-            font=("Segoe UI",8,"bold")).pack()
+        ctk.CTkFrame(col, fg_color=C["divider"], height=1).pack(fill="x", padx=16, pady=10)
+        ctk.CTkLabel(
+            col, text="Joints", text_color=C["muted"], font=font_ui(12)).pack()
 
-        # 9 joint rows
-        jframe = ctk.CTkFrame(col,fg_color="transparent")
-        jframe.pack(fill="x",padx=8,pady=4)
+        jframe = ctk.CTkFrame(col, fg_color="transparent")
+        jframe.pack(fill="x", padx=12, pady=6)
         for jname in ALL_JOINT_NAMES:
-            r = ctk.CTkFrame(jframe,fg_color="transparent")
-            r.pack(fill="x",pady=1)
-            dot = ctk.CTkLabel(r,text="●",text_color=C["muted"],
-                font=("Segoe UI",10),width=16)
+            r = ctk.CTkFrame(jframe, fg_color="transparent")
+            r.pack(fill="x", pady=1)
+            dot = ctk.CTkLabel(
+                r, text="●", text_color=C["muted"], font=font_ui(12), width=16)
             dot.pack(side="left")
-            ctk.CTkLabel(r,text=SHORT_NAMES.get(jname,jname),
-                text_color=C["muted"],font=("Segoe UI",8),
-                anchor="w",width=58).pack(side="left")
-            dev_lbl = ctk.CTkLabel(r,text="—",text_color=C["muted"],
-                font=("Segoe UI",8),anchor="e",width=40)
+            ctk.CTkLabel(
+                r, text=SHORT_NAMES.get(jname, jname),
+                text_color=C["muted"], font=font_ui(12),
+                anchor="w", width=72).pack(side="left")
+            dev_lbl = ctk.CTkLabel(
+                r, text="—", text_color=C["muted"],
+                font=font_ui(12), anchor="e", width=42)
             dev_lbl.pack(side="right")
             self._dot_labels[jname] = dot
             self._dev_labels[jname] = dev_lbl
 
     def _build_col3(self):
-        col = ctk.CTkFrame(self,fg_color=C["panel"],corner_radius=0)
-        col.grid(row=1,column=4,sticky="nsew")
-        col.columnconfigure(0,weight=1)
-        # Store ref for countdown overlay
+        col = ctk.CTkFrame(self, fg_color=C["panel"], corner_radius=0)
+        col.grid(row=1, column=4, sticky="nsew")
+        col.columnconfigure(0, weight=1)
         self._col3 = col
 
-        ctk.CTkLabel(col,text="Your Performance",text_color=C["gold"],
-            font=("Segoe UI",11,"bold")).pack(pady=(8,4))
+        heading = ctk.CTkLabel(
+            col, text="Your performance", text_color=C["gold"],
+            font=font_ui(14, "bold"))
+        heading.pack(pady=(12, 6))
+        self._accent_labels.append(heading)
 
-        vc = ctk.CTkFrame(col,fg_color="#000",corner_radius=6,
-                          width=self.CAM_W,height=self.CAM_H)
-        vc.pack(padx=3,pady=2)
+        vc = ctk.CTkFrame(
+            col, fg_color=C["stage"], corner_radius=2,
+            width=self.CAM_W, height=self.CAM_H)
+        vc.pack(padx=12, pady=2)
         vc.pack_propagate(False)
         self._cam_frame = vc
-        self._cam_lbl = ctk.CTkLabel(vc,text="Camera starting…",fg_color="#000",
-            text_color=C["muted"])
+        self._cam_lbl = ctk.CTkLabel(
+            vc, text="Camera starting…", fg_color=C["stage"],
+            text_color=C["stage_text"], font=font_ui(13))
         self._cam_lbl.pack(fill="both", expand=True)
 
-        # Separate overlay — NEVER write "Session Complete!" onto the camera label
         self._complete_overlay = ctk.CTkLabel(
             vc, text="Session Complete!",
-            font=("Georgia", 22, "bold"),
-            text_color=C["gold"], fg_color="#000000",
+            font=font_display(22, "bold"),
+            text_color=C["gold_bright"], fg_color=C["stage"],
             width=self.CAM_W, height=self.CAM_H,
         )
-        # hidden until session ends
         self._complete_overlay.place_forget()
 
-        # Countdown overlay label (hidden initially)
-        self._countdown_lbl = ctk.CTkLabel(col,text="",
-            font=("Georgia",80,"bold"),text_color=C["gold"],fg_color="transparent")
+        self._countdown_lbl = ctk.CTkLabel(
+            col, text="", font=font_display(64, "bold"),
+            text_color=C["gold"], fg_color="transparent")
+        self._accent_labels.append(self._countdown_lbl)
 
     def _build_bottombar(self):
-        bar = ctk.CTkFrame(self, fg_color=C["card"], height=56, corner_radius=0)
+        bar = ctk.CTkFrame(self, fg_color=C["surface"], height=64, corner_radius=0)
         bar.grid(row=2, column=0, columnspan=5, sticky="ew")
         bar.grid_propagate(False)
         bar.columnconfigure(0, weight=1)
+        self._bottom_bar = bar
 
         self._feedback_lbl = ctk.CTkLabel(
             bar,
-            text="Tick Record if you want a video, then press START.",
-            text_color=C["offwhite"], font=("Segoe UI", 11, "italic"), anchor="w",
+            text="Turn on Record if you want a video, then press Start.",
+            text_color=C["ivory"], font=font_ui(13), anchor="w",
         )
-        self._feedback_lbl.grid(row=0, column=0, padx=16, pady=8, sticky="ew")
+        self._feedback_lbl.grid(row=0, column=0, padx=18, pady=8, sticky="ew")
 
         self._record_check = ctk.CTkCheckBox(
             bar, text="Record this session",
@@ -1043,37 +1054,131 @@ class PracticeScreen(ctk.CTkFrame):
             onvalue=1, offvalue=0,
             text_color=C["ivory"], fg_color=C["gold"],
             hover_color=C["gold_hover"], border_color=C["gold_dim"],
-            font=font_ui(12, "bold"),
+            font=font_ui(13),
         )
         self._record_check.grid(row=0, column=1, padx=(8, 12), pady=8)
 
         self._action_btn = ctk.CTkButton(
-            bar, text="▶ START", width=150, height=36,
-            font=font_ui(13, "bold"), fg_color=C["gold"],
+            bar, text="Start", width=150, height=38,
+            font=font_ui(14, "bold"), fg_color=C["gold"],
             hover_color=C["gold_hover"], text_color=C["ink"],
-            corner_radius=8, command=self._start_session,
+            corner_radius=4, command=self._start_session,
         )
         self._action_btn.grid(row=0, column=2, padx=(0, 16), pady=8)
 
-    # ═══════════════════════ GAUGE ════════════════════════════════════════════
-
-    def _draw_gauge(self, value:float):
+    def _draw_gauge(self, value: float):
         c = self._gauge_canvas
-        if c is None: return
+        if c is None:
+            return
         c.delete("all")
-        cx,cy,r = 75,75,60
-        c.create_arc(cx-r,cy-r,cx+r,cy+r,start=220,extent=-260,
-            outline=C["divider"],width=10,style="arc")
+        cx, cy, r = 75, 75, 60
+        c.create_arc(
+            cx - r, cy - r, cx + r, cy + r, start=220, extent=-260,
+            outline=C["divider"], width=10, style="arc")
         if value > 0:
-            ext = -260*(value/100)
-            col = C["good"] if value>=75 else (C["close"] if value>=55 else C["poor"])
-            c.create_arc(cx-r,cy-r,cx+r,cy+r,start=220,extent=ext,
-                outline=col,width=10,style="arc")
-        c.create_text(cx,cy,text=f"{value:.0f}%",
-            fill=C["offwhite"],font=("Georgia",18,"bold"))
+            ext = -260 * (value / 100)
+            col = C["good"] if value >= 75 else (C["close"] if value >= 55 else C["poor"])
+            c.create_arc(
+                cx - r, cy - r, cx + r, cy + r, start=220, extent=ext,
+                outline=col, width=10, style="arc")
+        c.create_text(
+            cx, cy, text=f"{value:.0f}%",
+            fill=C["ivory"], font=font_display(18, "bold"))
 
+    def restyle(self):
+        """Apply the active tradition color. Does not touch the session."""
+        try:
+            self.configure(fg_color=C["bg"])
+        except Exception:
+            return
+        if hasattr(self, "_rule"):
+            self._rule.configure(fg_color=C["gold"])
+        if hasattr(self, "_top_wrap"):
+            self._top_wrap.configure(fg_color=C["surface"])
+        if hasattr(self, "_top_bar"):
+            self._top_bar.configure(fg_color=C["surface"])
+        if hasattr(self, "_col1"):
+            self._col1.configure(fg_color=C["panel"])
+        if hasattr(self, "_col2"):
+            self._col2.configure(fg_color=C["surface"])
+        if hasattr(self, "_col3"):
+            self._col3.configure(fg_color=C["panel"])
+        if hasattr(self, "_bottom_bar"):
+            self._bottom_bar.configure(fg_color=C["surface"])
+        for lbl in getattr(self, "_accent_labels", []):
+            try:
+                lbl.configure(text_color=C["gold"])
+            except Exception:
+                pass
+        if getattr(self, "_gauge_canvas", None) is not None:
+            try:
+                self._gauge_canvas.configure(bg=C["surface"])
+            except Exception:
+                pass
+        if hasattr(self, "_record_check"):
+            self._record_check.configure(
+                fg_color=C["gold"], hover_color=C["gold_hover"],
+                border_color=C["gold_dim"], text_color=C["ivory"],
+            )
+        if hasattr(self, "_action_btn"):
+            label = str(self._action_btn.cget("text") or "")
+            if label == "End session":
+                self._action_btn.configure(
+                    fg_color=C["gold_deep"], hover_color=C["gold_hover"],
+                    text_color=C["ink"],
+                )
+            elif label in ("Start", "Starting…"):
+                self._action_btn.configure(
+                    fg_color=C["gold"], hover_color=C["gold_hover"],
+                    text_color=C["ink"],
+                )
+        if hasattr(self, "_complete_overlay"):
+            self._complete_overlay.configure(text_color=C["gold_bright"])
 
-    # ═══════════════════════ SESSION CONTROL ══════════════════════════════════
+    def _schedule_fit(self, event=None):
+        if event is not None and event.widget is not self:
+            return
+        if self._running:
+            return
+        job = getattr(self, "_fit_job", None)
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except Exception:
+                pass
+        self._fit_job = self.after(80, self._apply_stage_size)
+
+    def _apply_stage_size(self):
+        self._fit_job = None
+        if self._running:
+            return
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
+        width = self.winfo_width()
+        height = self.winfo_height()
+        if width < 480 or height < 360:
+            return
+        col_w = max(240, (width - 260) // 2)
+        avail_h = height - 56 - 64 - 40 - 260
+        avail_w = max(240, col_w - 28)
+        vh = int(min(max(150, avail_h), avail_w * 9 / 16))
+        vw = int(vh * 16 / 9)
+        vh = max(150, vh)
+        vw = max(266, vw)
+        if abs(vw - self.EXP_W) < 12 and abs(vh - self.EXP_H) < 12:
+            return
+        self.EXP_W = self.CAM_W = vw
+        self.EXP_H = self.CAM_H = vh
+        for frame in (getattr(self, "_exp_frame", None), getattr(self, "_cam_frame", None)):
+            if frame is not None:
+                frame.configure(width=vw, height=vh)
+        self._blank_photo = ImageTk.PhotoImage(Image.new("RGB", (vw, vh), (0, 0, 0)))
+        if hasattr(self, "_complete_overlay"):
+            self._complete_overlay.configure(width=vw, height=vh)
+
 
     def _cancel_session_timers(self):
         """Cancel delayed callbacks so Practice Again can't inherit a finished session."""
@@ -1125,14 +1230,14 @@ class PracticeScreen(ctk.CTkFrame):
             if not self._expert_loader.is_loaded:
                 if not self._expert_loader.load():
                     self._show_error("Expert data not found.\nRun:  python preprocess_multi_expert.py")
-                    self._action_btn.configure(state="normal", text="▶ START")
+                    self._action_btn.configure(state="normal", text="Start")
                     return
             # Open expert video fresh from the start
             if not self._open_expert_video():
                 self._show_error(
                     f"Expert video not found / cannot open:\n{self.video_path}"
                 )
-                self._action_btn.configure(state="normal", text="▶ START")
+                self._action_btn.configure(state="normal", text="Start")
                 return
             # Reset data
             self._frame_acc.clear()
@@ -1168,7 +1273,7 @@ class PracticeScreen(ctk.CTkFrame):
         except Exception as e:
             import traceback
             self._show_error(f"Error starting session:\n{traceback.format_exc()}")
-            self._action_btn.configure(state="normal", text="▶ START")
+            self._action_btn.configure(state="normal", text="Start")
 
     def _check_webcam_then_countdown(self):
         self._check_webcam_id = None
@@ -1179,7 +1284,7 @@ class PracticeScreen(ctk.CTkFrame):
                     text="⚠ Webcam not found — running in no-camera mode.",
                     text_color="#FFA500")
                 self.after(3000, lambda: self._feedback_lbl.configure(
-                    text="Press START when you are ready.", text_color=C["offwhite"]))
+                    text="Press Start when you are ready.", text_color=C["offwhite"]))
             elif getattr(self._cap_thread, 'error', None):
                 # Genuine error with no fallback available
                 self._show_error(
@@ -1187,7 +1292,7 @@ class PracticeScreen(ctk.CTkFrame):
                     "• Check USB connection\n• Allow camera access\n"
                     "• Close other apps using the camera")
                 self._stop_event.set()
-                self._action_btn.configure(state="normal", text="▶ START")
+                self._action_btn.configure(state="normal", text="Start")
                 return
         # Start pose thread and proceed with countdown (pose thread will operate on synthetic frames if needed)
         if self._pose_thread and not self._pose_thread.is_alive():
@@ -1211,7 +1316,7 @@ class PracticeScreen(ctk.CTkFrame):
                     self._feedback_lbl.configure(
                         text=f"⚠  {warn}", text_color="#FFA500")
                     self.after(3000, lambda: self._feedback_lbl.configure(
-                        text="Press START when you are ready.",
+                        text="Press Start when you are ready.",
                         text_color=C["offwhite"]))
             self._begin_tracking()
             return
@@ -1226,13 +1331,13 @@ class PracticeScreen(ctk.CTkFrame):
         if self._exp_cap is None or not self._exp_cap.isOpened():
             if not self._open_expert_video():
                 self._show_error("Cannot reopen expert video for practice.")
-                self._action_btn.configure(state="normal", text="▶ START")
+                self._action_btn.configure(state="normal", text="Start")
                 return
         else:
             # Reopen rather than seek — avoids EOF stuck state after prior session
             if not self._open_expert_video():
                 self._show_error("Cannot reopen expert video for practice.")
-                self._action_btn.configure(state="normal", text="▶ START")
+                self._action_btn.configure(state="normal", text="Start")
                 return
 
         self._running = True
@@ -1273,9 +1378,9 @@ class PracticeScreen(ctk.CTkFrame):
                 text_color=C["offwhite"],
             )
         self._action_btn.configure(
-            text="⏹ End Session",
+            text="End session",
             fg_color=C["gold_deep"], hover_color=C["gold_hover"],
-            text_color=C["ivory"], state="normal",
+            text_color=C["ink"], state="normal",
             command=self._end_session_user,
         )
         self._start_loop_audio()
@@ -1800,7 +1905,7 @@ class PracticeScreen(ctk.CTkFrame):
         # ── Timer ─────────────────────────────────────────────────────────────
         elapsed = time.time() - self._session_start
         self._hud_timer.configure(text=f"{int(elapsed)//60}:{int(elapsed)%60:02d}")
-        self._timer_lbl.configure(text=f"⏱ {int(elapsed)//60}:{int(elapsed)%60:02d}")
+        self._timer_lbl.configure(text=f"{int(elapsed)//60}:{int(elapsed)%60:02d}")
 
         # ── FPS counter ───────────────────────────────────────────────────────
         self._fps_counter += 1
@@ -1847,7 +1952,7 @@ class PracticeScreen(ctk.CTkFrame):
                 image=self._blank_photo,
                 text=message,
                 text_color=C["muted"],
-                font=("Segoe UI", 12),
+                font=font_ui(13),
             )
             self._cam_lbl.lift()
         except Exception:
@@ -1859,6 +1964,8 @@ class PracticeScreen(ctk.CTkFrame):
 
     def on_show(self):
         """Called every time this screen becomes visible. Fully resets to pre-session state."""
+        self.restyle()
+        self._schedule_fit()
         # Invalidate any pending finish/countdown from the previous session
         self._session_gen += 1
         self._cancel_session_timers()
@@ -1896,7 +2003,7 @@ class PracticeScreen(ctk.CTkFrame):
         # 8. Reset action button → START
         if hasattr(self, '_action_btn'):
             self._action_btn.configure(
-                text="▶ START", state="normal",
+                text="Start", state="normal",
                 fg_color=C["gold"], hover_color=C["gold_hover"],
                 text_color=C["ink"], command=self._start_session)
         # 9. Reset display labels using blank placeholder to avoid stale pyimage errors
@@ -1924,12 +2031,12 @@ class PracticeScreen(ctk.CTkFrame):
             self._rep_status.configure(text="", text_color=C["gold"])
         if hasattr(self, '_feedback_lbl'):
             self._feedback_lbl.configure(
-                text="Press START when you are ready.",
+                text="Press Start when you are ready.",
                 text_color=C["offwhite"])
         if hasattr(self, '_hud_timer'):
             self._hud_timer.configure(text="0:00")
         if hasattr(self, '_timer_lbl'):
-            self._timer_lbl.configure(text="⏱ 0:00")
+            self._timer_lbl.configure(text="0:00")
         if hasattr(self, '_fps_lbl'):
             self._fps_lbl.configure(text="Live: —fps")
         if hasattr(self, '_gauge_pct'):

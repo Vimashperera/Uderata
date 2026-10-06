@@ -1,17 +1,11 @@
 """
 screen_menu.py — Step selection for the active dance style.
-Black & gold brand-first home.
 """
 import customtkinter as ctk
-from tkinter import Canvas
 from typing import Callable, Optional
 
 import config
 from ui.theme import C, font_display, font_ui
-
-# Content column width inside the 1280px window
-MENU_CONTENT_W = 960
-STEP_DESC_WRAP = 820
 
 
 class MenuScreen(ctk.CTkFrame):
@@ -32,161 +26,129 @@ class MenuScreen(ctk.CTkFrame):
         self._selected_step: Optional[str] = None
         self._style_id = config.STYLE_ID
         self._step_cards = {}
-        self._steps_host = None
+        self._desc_labels = []
         self._build_ui()
+        self.bind("<Configure>", self._on_resize)
 
     def _build_ui(self):
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=0)
         self.rowconfigure(1, weight=1)
-        self.rowconfigure(2, weight=0)
 
-        ctk.CTkFrame(self, fg_color=C["gold"], height=3, corner_radius=0).grid(
-            row=0, column=0, sticky="ew"
+        self._rule = ctk.CTkFrame(self, fg_color=C["gold"], height=3, corner_radius=0)
+        self._rule.grid(row=0, column=0, sticky="ew")
+
+        body = ctk.CTkFrame(self, fg_color=C["bg"], corner_radius=0)
+        body.grid(row=1, column=0, sticky="nsew")
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(1, weight=1)
+        self._body = body
+
+        self._build_header(body)
+
+        self._list_holder = ctk.CTkFrame(body, fg_color="transparent")
+        self._list_holder.grid(row=1, column=0, sticky="nsew", pady=(4, 4))
+        self._list_holder.rowconfigure(0, weight=1)
+        self._list_holder.columnconfigure(0, weight=1)
+
+        self._steps_host = ctk.CTkScrollableFrame(
+            self._list_holder,
+            fg_color=C["bg"],
+            corner_radius=0,
+            scrollbar_fg_color=C["surface"],
+            scrollbar_button_color=C["gold_dim"],
+            scrollbar_button_hover_color=C["gold"],
         )
+        self._steps_host.grid(row=0, column=0, sticky="nsew")
+        self._steps_host.columnconfigure(0, weight=1)
+        self._steps_host.bind("<MouseWheel>", self._on_step_wheel)
+        self._steps_host._parent_canvas.bind("<MouseWheel>", self._on_step_wheel)
 
-        content = ctk.CTkFrame(self, fg_color=C["bg"], corner_radius=0)
-        content.grid(row=1, column=0, sticky="nsew")
-        content.columnconfigure(0, weight=1)
-        content.rowconfigure(0, weight=1)
-
-        # Fixed-width centered column so the step list never collapses
-        center = ctk.CTkFrame(
-            content, fg_color="transparent", width=MENU_CONTENT_W, height=620,
-        )
-        center.grid(row=0, column=0)
-        center.grid_propagate(False)
-        center.columnconfigure(0, weight=1)
-        center.rowconfigure(2, weight=1)
-
-        self.after(50, lambda: self._size_center(center, content))
-
-        self._build_header(center)
-        ctk.CTkFrame(center, fg_color=C["gold_dim"], height=1, corner_radius=0).grid(
-            row=1, column=0, sticky="ew", pady=(4, 12)
-        )
-        self._build_style_card(center)
-        self._build_cta(center)
-
-        ctk.CTkFrame(self, fg_color=C["gold_deep"], height=3, corner_radius=0).grid(
-            row=2, column=0, sticky="ew"
-        )
-
-    def _size_center(self, center: ctk.CTkFrame, content: ctk.CTkFrame):
-        try:
-            content.update_idletasks()
-            h = max(content.winfo_height() - 8, 520)
-            center.configure(height=h)
-        except Exception:
-            center.configure(height=620)
+        self._build_cta(body)
+        self._rebuild_step_cards()
 
     def _build_header(self, parent):
         header = ctk.CTkFrame(parent, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", pady=(20, 2))
+        header.grid(row=0, column=0, sticky="ew", padx=40, pady=(22, 6))
+        header.columnconfigure(0, weight=1)
+        self._header = header
 
-        top = ctk.CTkFrame(header, fg_color="transparent")
-        top.pack(fill="x")
+        nav = ctk.CTkFrame(header, fg_color="transparent")
+        nav.grid(row=0, column=0, sticky="ew")
+        nav.columnconfigure(0, weight=1)
 
         if self.on_back:
             ctk.CTkButton(
-                top,
-                text="← Styles",
-                width=100,
-                height=28,
-                corner_radius=6,
-                fg_color=C["elevated"],
-                hover_color=C["card"],
-                text_color=C["gold"],
+                nav,
+                text="Traditions",
+                width=120,
+                height=34,
+                corner_radius=4,
+                fg_color=C["surface"],
+                hover_color=C["elevated"],
+                text_color=C["ivory"],
                 border_width=1,
                 border_color=C["divider"],
-                font=font_ui(11),
+                font=font_ui(13),
                 command=self.on_back,
-            ).pack(side="left", padx=(0, 8))
+            ).grid(row=0, column=0, sticky="w")
 
         if self.on_history:
             ctk.CTkButton(
-                top,
-                text="My Progress",
+                nav,
+                text="Progress",
                 width=120,
-                height=28,
-                corner_radius=6,
-                fg_color=C["elevated"],
-                hover_color=C["card"],
-                text_color=C["gold"],
+                height=34,
+                corner_radius=4,
+                fg_color=C["surface"],
+                hover_color=C["elevated"],
+                text_color=C["ivory"],
                 border_width=1,
                 border_color=C["divider"],
-                font=font_ui(11, "bold"),
+                font=font_ui(13),
                 command=self.on_history,
-            ).pack(side="right")
+            ).grid(row=0, column=1, sticky="e")
 
         style = config.get_style(self._style_id)
 
         self._brand_lbl = ctk.CTkLabel(
             header,
-            text=style["short_title"].upper(),
+            text=style["short_title"],
             text_color=C["gold"],
-            font=font_display(42, "bold"),
+            font=font_display(36, "bold"),
+            anchor="w",
         )
-        self._brand_lbl.pack(pady=(8, 0))
+        self._brand_lbl.grid(row=1, column=0, sticky="w", pady=(16, 0))
 
         self._heading_lbl = ctk.CTkLabel(
             header,
-            text=style.get("menu_heading", f"{style['short_title']} Step Coaching"),
+            text=style.get("menu_heading", f"{style['short_title']} step coaching"),
             text_color=C["ivory"],
-            font=font_display(16, "italic"),
+            font=font_ui(15),
+            anchor="w",
         )
-        self._heading_lbl.pack(pady=(2, 4))
+        self._heading_lbl.grid(row=2, column=0, sticky="w", pady=(2, 0))
 
         self._meta_lbl = ctk.CTkLabel(
             header,
-            text=f"{style['title']}  ·  Live form & timing feedback",
-            text_color=C["muted"],
-            font=font_ui(11),
-        )
-        self._meta_lbl.pack()
-
-    def _build_style_card(self, parent):
-        card = ctk.CTkFrame(
-            parent,
-            fg_color=C["surface"],
-            corner_radius=14,
-            border_width=1,
-            border_color=C["border"],
-        )
-        card.grid(row=2, column=0, sticky="nsew", pady=4)
-        card.columnconfigure(0, weight=1)
-        card.rowconfigure(1, weight=1)
-
-        header_row = ctk.CTkFrame(card, fg_color=C["elevated"], corner_radius=10)
-        header_row.grid(row=0, column=0, sticky="ew", padx=2, pady=2)
-
-        ctk.CTkLabel(
-            header_row,
-            text="Choose your step",
-            text_color=C["gold"],
-            font=font_ui(13, "bold"),
-            anchor="w",
-        ).pack(side="left", padx=20, pady=10)
-
-        style = config.get_style(self._style_id)
-        self._tradition_lbl = ctk.CTkLabel(
-            header_row,
             text=style["subtitle"],
             text_color=C["muted"],
-            font=font_ui(10, "italic"),
+            font=font_ui(13),
+            anchor="w",
         )
-        self._tradition_lbl.pack(side="right", padx=20)
+        self._meta_lbl.grid(row=3, column=0, sticky="w", pady=(2, 8))
 
-        self._steps_host = ctk.CTkScrollableFrame(
-            card,
-            fg_color="transparent",
-            corner_radius=0,
-            width=MENU_CONTENT_W - 28,
-        )
-        self._steps_host.grid(row=1, column=0, sticky="nsew", padx=10, pady=(4, 10))
-        self._steps_host.columnconfigure(0, weight=1)
-
-        self._rebuild_step_cards()
+    def _on_resize(self, event):
+        if event.widget is not self:
+            return
+        inset = 48 if event.width < 900 else 72
+        wrap = max(280, min(event.width - inset * 2, 760))
+        for lbl in self._desc_labels:
+            try:
+                lbl.configure(wraplength=wrap)
+            except Exception:
+                pass
+        side = max(28, (event.width - 980) // 2)
+        self._apply_insets(side, event.width)
 
     def _rebuild_step_cards(self):
         if self._steps_host is None:
@@ -194,12 +156,22 @@ class MenuScreen(ctk.CTkFrame):
         for child in self._steps_host.winfo_children():
             child.destroy()
         self._step_cards = {}
+        self._desc_labels = []
         self._selected_step = None
+
+        intro = ctk.CTkLabel(
+            self._steps_host,
+            text="Steps",
+            text_color=C["ivory"],
+            font=font_ui(14, "bold"),
+            anchor="w",
+        )
+        intro.grid(row=0, column=0, sticky="w", padx=8, pady=(8, 6))
 
         for i, step in enumerate(config.list_steps(self._style_id)):
             self._add_step_card(
                 self._steps_host,
-                row=i,
+                row=i + 1,
                 step_id=step["id"],
                 title=step["title"],
                 description=step["description"],
@@ -214,65 +186,72 @@ class MenuScreen(ctk.CTkFrame):
                 hover_color=C["elevated"],
                 text_color=C["muted"],
             )
+            self._hint.configure(text="Select a step to continue")
 
     def configure_style(self, style_id: str):
         """Reload the step list for the chosen dance style."""
         self._style_id = style_id
         style = config.get_style(style_id)
+        self.configure(fg_color=C["bg"])
+        self._body.configure(fg_color=C["bg"])
+        self._rule.configure(fg_color=C["gold"])
+        self._steps_host.configure(
+            fg_color=C["bg"],
+            scrollbar_fg_color=C["surface"],
+            scrollbar_button_color=C["gold_dim"],
+            scrollbar_button_hover_color=C["gold"],
+        )
         if hasattr(self, "_brand_lbl"):
-            self._brand_lbl.configure(text=style["short_title"].upper())
+            self._brand_lbl.configure(text=style["short_title"], text_color=C["gold"])
         if hasattr(self, "_heading_lbl"):
             self._heading_lbl.configure(
-                text=style.get("menu_heading", f"{style['short_title']} Step Coaching")
+                text=style.get("menu_heading", f"{style['short_title']} step coaching"),
+                text_color=C["ivory"],
             )
         if hasattr(self, "_meta_lbl"):
-            self._meta_lbl.configure(
-                text=f"{style['title']}  ·  Live form & timing feedback"
-            )
-        if hasattr(self, "_tradition_lbl"):
-            self._tradition_lbl.configure(text=style["subtitle"])
+            self._meta_lbl.configure(text=style["subtitle"], text_color=C["muted"])
         self._rebuild_step_cards()
+        self._fit_to_window()
 
     def _add_step_card(self, parent, row, step_id, title, description, tags, difficulty):
         frame = ctk.CTkFrame(
             parent,
             fg_color=C["card"],
-            corner_radius=12,
+            corner_radius=4,
             border_width=1,
             border_color=C["divider"],
             cursor="hand2",
         )
-        frame.grid(row=row, column=0, sticky="ew", padx=6, pady=5)
+        frame.grid(row=row, column=0, sticky="ew", padx=8, pady=5)
         frame.columnconfigure(1, weight=1)
 
-        radio_canvas = Canvas(
-            frame, width=22, height=22, bg=C["card"], highlightthickness=0
-        )
-        radio_canvas.grid(row=0, column=0, rowspan=2, padx=(14, 8), pady=12)
-        radio_canvas.create_oval(2, 2, 20, 20, outline=C["gold_dim"], width=2)
+        mark = ctk.CTkFrame(frame, width=4, fg_color=C["divider"], corner_radius=0)
+        mark.grid(row=0, column=0, rowspan=3, sticky="ns", padx=(0, 4))
+        mark.grid_propagate(False)
 
         title_lbl = ctk.CTkLabel(
             frame,
             text=title,
             text_color=C["ivory"],
-            font=font_ui(14, "bold"),
+            font=font_ui(16, "bold"),
             anchor="w",
         )
-        title_lbl.grid(row=0, column=1, sticky="ew", padx=(4, 16), pady=(10, 2))
+        title_lbl.grid(row=0, column=1, sticky="ew", padx=(12, 18), pady=(12, 2))
 
         desc_lbl = ctk.CTkLabel(
             frame,
             text=description,
             text_color=C["muted"],
-            font=font_ui(10),
+            font=font_ui(13),
             anchor="w",
-            wraplength=STEP_DESC_WRAP,
+            wraplength=640,
             justify="left",
         )
-        desc_lbl.grid(row=1, column=1, sticky="ew", padx=(4, 16), pady=(0, 4))
+        desc_lbl.grid(row=1, column=1, sticky="new", padx=(12, 18), pady=(0, 4))
+        self._desc_labels.append(desc_lbl)
 
         meta_row = ctk.CTkFrame(frame, fg_color="transparent")
-        meta_row.grid(row=2, column=1, sticky="w", padx=(4, 16), pady=(0, 10))
+        meta_row.grid(row=2, column=1, sticky="w", padx=(12, 18), pady=(0, 12))
 
         for tag in tags:
             ctk.CTkLabel(
@@ -280,48 +259,80 @@ class MenuScreen(ctk.CTkFrame):
                 text=f"  {tag}  ",
                 text_color=C["gold"],
                 fg_color=C["tip"],
-                font=font_ui(9, "bold"),
-                corner_radius=6,
-            ).pack(side="left", padx=3)
+                font=font_ui(11),
+                corner_radius=3,
+            ).pack(side="left", padx=(0, 6))
 
-        ctk.CTkLabel(
-            meta_row,
-            text=f"· {difficulty}",
-            text_color=C["muted"],
-            font=font_ui(9),
-        ).pack(side="left", padx=(12, 0))
+        if difficulty:
+            ctk.CTkLabel(
+                meta_row,
+                text=difficulty,
+                text_color=C["muted"],
+                font=font_ui(12),
+            ).pack(side="left", padx=(8, 0))
 
-        def on_enter(_):
+        def on_enter(_event):
             if self._selected_step != step_id:
                 frame.configure(border_color=C["gold_dim"])
 
-        def on_leave(_):
+        def on_leave(_event):
             if self._selected_step != step_id:
                 frame.configure(border_color=C["divider"])
 
-        def on_click(_):
-            self._select_step(step_id, frame, radio_canvas)
+        def on_click(_event):
+            self._select_step(step_id, frame, mark)
 
-        for widget in [frame, title_lbl, desc_lbl, radio_canvas, meta_row]:
-            widget.bind("<Enter>", on_enter)
-            widget.bind("<Leave>", on_leave)
-            widget.bind("<Button-1>", on_click)
+        self._bind_card(frame, on_enter, on_leave, on_click)
+        self._step_cards[step_id] = {"frame": frame, "mark": mark}
 
-        self._step_cards[step_id] = {"frame": frame, "radio_canvas": radio_canvas}
+    def _bind_card(self, widget, on_enter, on_leave, on_click):
+        widget.bind("<Enter>", on_enter)
+        widget.bind("<Leave>", on_leave)
+        widget.bind("<Button-1>", on_click)
+        widget.bind("<MouseWheel>", self._on_step_wheel)
+        for child in widget.winfo_children():
+            self._bind_card(child, on_enter, on_leave, on_click)
 
-    def _select_step(self, step_id: str, frame: ctk.CTkFrame, radio_canvas: Canvas):
-        for sid, widgets in self._step_cards.items():
-            widgets["frame"].configure(
-                border_color=C["divider"], fg_color=C["card"]
-            )
-            widgets["radio_canvas"].delete("fill")
+    def _on_step_wheel(self, event):
+        canvas = self._steps_host._parent_canvas
+        if canvas.yview() == (0.0, 1.0):
+            return "break"
+        canvas.yview_scroll(-int(event.delta / 6), "units")
+        return "break"
+
+    def _equalize_cards(self):
+        frames = [item["frame"] for item in self._step_cards.values()]
+        if not frames:
+            return
+        for frame in frames:
+            frame.grid_propagate(True)
+        self.update_idletasks()
+        target = max(frame.winfo_reqheight() for frame in frames)
+        target = max(target, 112)
+        inner_w = self._steps_host.winfo_width()
+        card_w = max(280, inner_w - 28) if inner_w > 80 else 0
+        for frame in frames:
+            frame.rowconfigure(1, weight=1)
+            if card_w:
+                frame.configure(height=target, width=card_w)
+            else:
+                frame.configure(height=target)
+            frame.grid_propagate(False)
+
+    def _refresh_scroll(self):
+        canvas = self._steps_host._parent_canvas
+        canvas.update_idletasks()
+        canvas.configure(scrollregion=canvas.bbox("all") or (0, 0, 0, 0))
+        canvas.yview_moveto(0)
+
+    def _select_step(self, step_id: str, frame: ctk.CTkFrame, mark: ctk.CTkFrame):
+        for _sid, widgets in self._step_cards.items():
+            widgets["frame"].configure(border_color=C["divider"], fg_color=C["card"], border_width=1)
+            widgets["mark"].configure(fg_color=C["divider"])
 
         self._selected_step = step_id
-        frame.configure(border_color=C["gold"], fg_color=C["step_active"])
-        radio_canvas.delete("fill")
-        radio_canvas.create_oval(
-            6, 6, 16, 16, fill=C["gold"], outline="", tags="fill"
-        )
+        frame.configure(border_color=C["gold"], fg_color=C["step_active"], border_width=2)
+        mark.configure(fg_color=C["gold"])
 
         if hasattr(self, "_cta_btn"):
             self._cta_btn.configure(
@@ -330,40 +341,70 @@ class MenuScreen(ctk.CTkFrame):
                 hover_color=C["gold_hover"],
                 text_color=C["ink"],
             )
+            self._hint.configure(text="Opens the expert recording for this step")
 
     def _build_cta(self, parent):
         cta_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        cta_frame.grid(row=3, column=0, sticky="ew", pady=(14, 24))
+        cta_frame.grid(row=2, column=0, sticky="ew", padx=40, pady=(8, 22))
+        cta_frame.columnconfigure(0, weight=1)
+        self._cta_host = cta_frame
 
         self._cta_btn = ctk.CTkButton(
             cta_frame,
-            text="Begin Learning  →",
-            font=font_ui(14, "bold"),
-            height=48,
-            corner_radius=8,
+            text="Begin learning",
+            font=font_ui(15, "bold"),
+            height=46,
+            corner_radius=4,
             fg_color=C["elevated"],
             hover_color=C["elevated"],
             text_color=C["muted"],
-            border_width=1,
-            border_color=C["divider"],
             state="disabled",
             command=self._on_begin_clicked,
         )
-        self._cta_btn.pack(fill="x")
+        self._cta_btn.grid(row=0, column=0, sticky="ew")
 
-        ctk.CTkLabel(
+        self._hint = ctk.CTkLabel(
             cta_frame,
-            text="Select the step above to continue",
+            text="Select a step to continue",
             text_color=C["muted"],
-            font=font_ui(10, "italic"),
-        ).pack(pady=(8, 0))
+            font=font_ui(12),
+            anchor="w",
+        )
+        self._hint.grid(row=1, column=0, sticky="w", pady=(8, 0))
 
     def _on_begin_clicked(self):
         if self._selected_step:
             self.on_begin(self._selected_step)
 
     def on_show(self):
-        pass
+        self.after(40, self._fit_to_window)
+
+    def _fit_to_window(self):
+        try:
+            width = self.winfo_width()
+        except Exception:
+            return
+        if width < 200:
+            return
+        side = max(28, (width - 980) // 2)
+        self._apply_insets(side, width)
+
+    def _apply_insets(self, side: int, width: int):
+        wrap = max(280, min(width - side * 2 - 64, 760))
+        for lbl in self._desc_labels:
+            try:
+                lbl.configure(wraplength=wrap)
+            except Exception:
+                pass
+        try:
+            self._header.grid_configure(padx=side + 8)
+            self._list_holder.grid_configure(padx=side)
+            self._cta_host.grid_configure(padx=side + 8)
+            self._brand_lbl.configure(wraplength=max(240, width - side * 2 - 40))
+        except Exception:
+            pass
+        self._equalize_cards()
+        self._refresh_scroll()
 
     def on_hide(self):
         pass

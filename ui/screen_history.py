@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import config
 from core.angle_calculator import JOINT_DISPLAY_NAMES
 from core import session_history as hist
-from ui.theme import C, font_display, font_ui
+from ui.theme import C, font_display, font_ui, palette
 from ui.screen_report import _fig_to_image
 
 
@@ -37,9 +37,8 @@ class HistoryScreen(ctk.CTkFrame):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
-        ctk.CTkFrame(self, fg_color=C["gold"], height=3, corner_radius=0).grid(
-            row=0, column=0, sticky="ew"
-        )
+        self._rule = ctk.CTkFrame(self, fg_color=C["gold"], height=3, corner_radius=0)
+        self._rule.grid(row=0, column=0, sticky="ew")
 
         top = ctk.CTkFrame(self, fg_color=C["surface"], corner_radius=0)
         top.grid(row=1, column=0, sticky="nsew")
@@ -52,31 +51,32 @@ class HistoryScreen(ctk.CTkFrame):
 
         ctk.CTkButton(
             header,
-            text="← Back",
+            text="Back",
             width=90,
-            height=28,
-            corner_radius=6,
-            fg_color=C["elevated"],
-            hover_color=C["card"],
-            text_color=C["gold"],
+            height=34,
+            corner_radius=4,
+            fg_color=C["surface"],
+            hover_color=C["elevated"],
+            text_color=C["ivory"],
             border_width=1,
             border_color=C["divider"],
-            font=font_ui(11),
+            font=font_ui(13),
             command=self.on_back,
         ).grid(row=0, column=0, sticky="w")
 
-        ctk.CTkLabel(
+        self._title = ctk.CTkLabel(
             header,
-            text="My Progress",
+            text="Progress",
             text_color=C["gold"],
-            font=font_display(22, "bold"),
-        ).grid(row=0, column=1, sticky="w", padx=16)
+            font=font_display(26, "bold"),
+        )
+        self._title.grid(row=0, column=1, sticky="w", padx=16)
 
         ctk.CTkLabel(
             header,
-            text="Local session history for this installation",
+            text="Saved on this computer",
             text_color=C["muted"],
-            font=font_ui(10, "italic"),
+            font=font_ui(12),
         ).grid(row=0, column=2, sticky="e")
 
         filters = ctk.CTkFrame(top, fg_color=C["card"], corner_radius=10)
@@ -95,12 +95,15 @@ class HistoryScreen(ctk.CTkFrame):
             values=style_names or ["—"],
             variable=self._style_var,
             command=self._on_style_changed,
-            fg_color=C["elevated"],
-            button_color=C["gold_deep"],
+            fg_color=C["surface"],
+            button_color=C["gold"],
             button_hover_color=C["gold_hover"],
             text_color=C["ivory"],
-            font=font_ui(11),
-            width=220,
+            dropdown_fg_color=C["surface"],
+            dropdown_text_color=C["ivory"],
+            dropdown_hover_color=C["tip"],
+            font=font_ui(13),
+            width=200,
         )
         self._style_menu.grid(row=0, column=1, padx=6, pady=12, sticky="ew")
 
@@ -113,22 +116,21 @@ class HistoryScreen(ctk.CTkFrame):
             values=["—"],
             variable=self._step_var,
             command=self._on_step_changed,
-            fg_color=C["elevated"],
-            button_color=C["gold_deep"],
+            fg_color=C["surface"],
+            button_color=C["gold"],
             button_hover_color=C["gold_hover"],
             text_color=C["ivory"],
-            font=font_ui(11),
-            width=320,
+            dropdown_fg_color=C["surface"],
+            dropdown_text_color=C["ivory"],
+            dropdown_hover_color=C["tip"],
+            font=font_ui(13),
+            width=280,
         )
         self._step_menu.grid(row=0, column=3, padx=(6, 14), pady=12, sticky="ew")
 
         self._body = ctk.CTkScrollableFrame(top, fg_color=C["bg"], corner_radius=0)
         self._body.grid(row=2, column=0, sticky="nsew", padx=14, pady=(0, 14))
         self._body.columnconfigure(0, weight=1)
-
-        ctk.CTkFrame(self, fg_color=C["gold_deep"], height=3, corner_radius=0).grid(
-            row=2, column=0, sticky="ew"
-        )
 
         # Initial selection
         if style_names:
@@ -143,6 +145,21 @@ class HistoryScreen(ctk.CTkFrame):
     def on_hide(self):
         pass
 
+    def _paint_style(self, style_id: str):
+        pal = palette(style_id)
+        if hasattr(self, "_rule"):
+            self._rule.configure(fg_color=pal["gold"])
+        if hasattr(self, "_title"):
+            self._title.configure(text_color=pal["gold"])
+        for menu in (getattr(self, "_style_menu", None), getattr(self, "_step_menu", None)):
+            if menu is None:
+                continue
+            menu.configure(
+                button_color=pal["gold"],
+                button_hover_color=pal["gold_hover"],
+                dropdown_hover_color=pal["tip"],
+            )
+
     def _on_style_changed(self, title: str):
         self._style_id = self._style_map.get(title, self._style_id)
         steps = config.list_steps(self._style_id)
@@ -150,6 +167,7 @@ class HistoryScreen(ctk.CTkFrame):
         titles = [s["title"] for s in steps] or ["—"]
         self._step_menu.configure(values=titles)
         self._step_var.set(titles[0])
+        self._paint_style(self._style_id)
         self._on_step_changed(titles[0])
 
     def _on_step_changed(self, title: str):
@@ -193,6 +211,7 @@ class HistoryScreen(ctk.CTkFrame):
 
         stats = hist.step_aggregate_stats(step_id)
         flagged = hist.most_flagged_joints(step_id, limit=3)
+        pal = palette(self._style_id)
 
         # Aggregate cards
         stats_row = ctk.CTkFrame(self._body, fg_color="transparent")
@@ -216,14 +235,14 @@ class HistoryScreen(ctk.CTkFrame):
                 card, text=label, text_color=C["muted"], font=font_ui(10),
             ).pack(anchor="w", padx=14, pady=(10, 0))
             ctk.CTkLabel(
-                card, text=value, text_color=C["gold"], font=font_ui(18, "bold"),
+                card, text=value, text_color=pal["gold"], font=font_display(22, "bold"),
             ).pack(anchor="w", padx=14, pady=(2, 12))
 
         # Trend chart
         ctk.CTkLabel(
             self._body,
-            text="Form & Timing Across Sessions",
-            text_color=C["gold"],
+            text="Form and timing across sessions",
+            text_color=pal["gold"],
             font=font_ui(12, "bold"),
             anchor="w",
         ).grid(row=1, column=0, sticky="ew", padx=14, pady=(16, 4))
@@ -232,22 +251,27 @@ class HistoryScreen(ctk.CTkFrame):
         timings = [float(s["timing_score"]) for s in sessions]
         xs = np.arange(1, len(sessions) + 1)
 
-        fig, ax = plt.subplots(figsize=(10.2, 3.4))
+        body_w = self._body.winfo_width()
+        if body_w < 240:
+            body_w = max(640, self.winfo_width() - 64)
+        img_w = max(520, min(1080, body_w - 20))
+        img_h = max(180, int(img_w * 0.32))
+        fig, ax = plt.subplots(figsize=(img_w / 100, img_h / 100))
         fig.patch.set_facecolor(C["surface"])
         ax.set_facecolor(C["bg"])
-        ax.plot(xs, forms, color=C["gold"], marker="o", linewidth=1.8, label="Form %")
+        ax.plot(xs, forms, color=pal["gold"], marker="o", linewidth=1.8, label="Form %")
         ax.plot(
             xs, timings, color=C["good"], marker="s", linewidth=1.4,
             alpha=0.9, label="Timing %",
         )
         ax.set_ylim(0, 105)
-        ax.set_xlabel("Session # (oldest → newest)", color=C["muted"], fontsize=8)
+        ax.set_xlabel("Session (oldest to newest)", color=C["muted"], fontsize=8)
         ax.set_ylabel("Score %", color=C["muted"], fontsize=8)
         ax.tick_params(colors=C["ivory"], labelsize=7)
         ax.spines[:].set_color(C["divider"])
         ax.legend(facecolor=C["surface"], labelcolor=C["ivory"], fontsize=8)
         fig.tight_layout(pad=0.8)
-        img = _fig_to_image(fig, 980, 300)
+        img = _fig_to_image(fig, img_w, img_h)
         plt.close(fig)
         self._chart_img = img
         ctk.CTkLabel(self._body, image=img, text="").grid(
@@ -259,7 +283,7 @@ class HistoryScreen(ctk.CTkFrame):
         last_ts = sessions[-1]["timestamp"]
         ctk.CTkLabel(
             self._body,
-            text=f"Recorded from {self._fmt_ts(first_ts)}  →  {self._fmt_ts(last_ts)}",
+            text=f"Recorded from {self._fmt_ts(first_ts)} to {self._fmt_ts(last_ts)}",
             text_color=C["muted"],
             font=font_ui(9),
             anchor="w",
@@ -268,8 +292,8 @@ class HistoryScreen(ctk.CTkFrame):
         # Persistent problem joints
         ctk.CTkLabel(
             self._body,
-            text="Most Frequently Flagged Joints",
-            text_color=C["gold"],
+            text="Most frequently flagged joints",
+            text_color=pal["gold"],
             font=font_ui(12, "bold"),
             anchor="w",
         ).grid(row=4, column=0, sticky="ew", padx=14, pady=(8, 4))
@@ -295,8 +319,9 @@ class HistoryScreen(ctk.CTkFrame):
                 ctk.CTkLabel(
                     card,
                     text=(
-                        f"{name}  ·  flagged in {int(row['flag_count'])} session(s)  ·  "
-                        f"avg accuracy {float(row['avg_accuracy']):.0f}%"
+                        f"{name}: flagged in {int(row['flag_count'])} "
+                        f"session{'s' if int(row['flag_count']) != 1 else ''}, "
+                        f"average accuracy {float(row['avg_accuracy']):.0f}%"
                     ),
                     text_color=C["ivory"],
                     font=font_ui(11),
